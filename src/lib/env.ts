@@ -42,6 +42,31 @@ const optionalString = () =>
     z.string().trim().min(1).optional(),
   );
 
+/**
+ * `.env.example` fills unknown values with `xxxx` runs and a literal `PASSWORD`
+ * inside the Postgres URLs. Copying the example across and missing a line is the
+ * most common setup mistake, and a half-filled value fails far from its cause —
+ * a 401 from Supabase, a DNS error on the fake `aws-0-region` host — so catch it
+ * at boot instead.
+ */
+const PLACEHOLDER = /xxxx|:PASSWORD@|aws-0-region/i;
+
+const notPlaceholder = (v: unknown) => typeof v !== "string" || !PLACEHOLDER.test(v);
+
+const placeholderMessage = (label: string) =>
+  `${label} is still the .env.example placeholder — replace it with the real value`;
+
+/** Optional, but if set must be a real `postgresql://` connection string. */
+const postgresUrl = (label: string) =>
+  optionalString()
+    .pipe(
+      z
+        .string()
+        .regex(/^postgres(ql)?:\/\/./, `${label} must be a postgresql:// connection string`)
+        .optional(),
+    )
+    .refine(notPlaceholder, placeholderMessage(label));
+
 const serverSchema = z.object({
   // ── App (required to boot) ────────────────────────────────────────────────
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -55,14 +80,25 @@ const serverSchema = z.object({
   CRON_SECRET: requiredString("CRON_SECRET"),
 
   // ── Supabase (Phase 1+) ───────────────────────────────────────────────────
-  NEXT_PUBLIC_SUPABASE_URL: optionalString().pipe(z.url().optional()),
-  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: optionalString(),
-  SUPABASE_SECRET_KEY: optionalString(),
-  DATABASE_URL: optionalString(),
-  DIRECT_URL: optionalString(),
+  NEXT_PUBLIC_SUPABASE_URL: optionalString()
+    .pipe(z.url().optional())
+    .refine(notPlaceholder, placeholderMessage("NEXT_PUBLIC_SUPABASE_URL")),
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: optionalString().refine(
+    notPlaceholder,
+    placeholderMessage("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
+  ),
+  SUPABASE_SECRET_KEY: optionalString().refine(
+    notPlaceholder,
+    placeholderMessage("SUPABASE_SECRET_KEY"),
+  ),
+  DATABASE_URL: postgresUrl("DATABASE_URL"),
+  DIRECT_URL: postgresUrl("DIRECT_URL"),
 
   // ── OpenAI (Phase 5+) ─────────────────────────────────────────────────────
-  OPENAI_API_KEY: optionalString(),
+  OPENAI_API_KEY: optionalString().refine(
+    notPlaceholder,
+    placeholderMessage("OPENAI_API_KEY"),
+  ),
   OPENAI_STT_MODEL: z.string().trim().min(1).default("whisper-1"),
   OPENAI_PLANNER_MODEL: z.string().trim().min(1).default("gpt-4o"),
 
