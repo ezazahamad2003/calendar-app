@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "./auth.css";
 import "./enhancements.css";
 import "./timeline.css";
 import "./management.css";
