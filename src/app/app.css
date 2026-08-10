@@ -1,0 +1,902 @@
+/*
+ * Phase 3 — the working application: shell, dashboard, Gantt, calendar, crew.
+ *
+ * Quiet everywhere except the board: the Gantt's trade-colored bars with the
+ * clay critical edge are the one loud thing, per the design brief. Jobsite
+ * non-negotiables (SPEC §7): 44px touch targets, visible focus, 375px
+ * responsive, reduced motion respected.
+ */
+
+/* ── Shell ─────────────────────────────────────────────────────────────── */
+
+.shell {
+  display: grid;
+  grid-template-columns: 232px 1fr;
+  min-height: 100vh;
+  background: var(--canvas);
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px 14px;
+  background: var(--forest);
+  color: #e8ede9;
+}
+
+.rail-org-name {
+  margin: 0;
+  font-weight: 700;
+  font-size: 15px;
+  color: #fff;
+}
+
+.rail-org-user {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: #9db4ac;
+  overflow-wrap: anywhere;
+}
+
+.rail-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rail-link {
+  display: block;
+  min-height: 40px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  color: #e8ede9;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.rail-link:hover {
+  background: var(--forest-2);
+}
+
+.rail-heading {
+  margin: 0 0 6px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #9db4ac;
+}
+
+.rail-empty {
+  margin: 0;
+  padding: 0 10px;
+  font-size: 13px;
+  color: #9db4ac;
+}
+
+.rail-projects {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rail-project {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: #e8ede9;
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.rail-project:hover {
+  background: var(--forest-2);
+}
+
+.rail-project-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail-late {
+  flex: none;
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--clay);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.rail-signout-form {
+  margin-top: auto;
+}
+
+.rail-signout {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--forest-2);
+  border-radius: 8px;
+  background: transparent;
+  color: #cdd9d3;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.rail-signout:hover {
+  background: var(--forest-2);
+}
+
+.shell-main {
+  min-width: 0;
+}
+
+/* ── Page scaffolding ──────────────────────────────────────────────────── */
+
+.page {
+  max-width: 1200px;
+  padding: 24px 24px 80px;
+}
+
+.page--split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 24px;
+}
+
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.page-eyebrow {
+  margin: 0 0 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.page-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--forest);
+}
+
+/* ── Buttons, forms, disclosures ───────────────────────────────────────── */
+
+.btn {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--forest);
+  border-radius: 8px;
+  background: var(--forest);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--forest-2);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.btn--ghost {
+  background: transparent;
+  color: var(--forest);
+}
+
+.btn--ghost:hover:not(:disabled) {
+  background: #ebe9e1;
+}
+
+.btn:focus-visible,
+.rail-link:focus-visible,
+.rail-project:focus-visible,
+.rail-signout:focus-visible,
+.zoom-link:focus-visible,
+.gantt-bar:focus-visible,
+.gantt-milestone:focus-visible,
+.cal-chip:focus-visible,
+.field-input:focus-visible,
+.cell-input:focus-visible,
+.disclosure-summary:focus-visible,
+.minical-more:focus-visible,
+.project-card:focus-visible {
+  outline: 2px solid var(--sage);
+  outline-offset: 2px;
+}
+
+.disclosure {
+  margin-top: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+}
+
+.disclosure-summary {
+  padding: 14px 16px;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--forest);
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.stack-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 16px 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 130px;
+}
+
+.field-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.field-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.field-input {
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  color: var(--ink);
+}
+
+.field-error,
+.form-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--clay);
+}
+
+.form-error {
+  padding: 8px 10px;
+  border: 1px solid #f0c5b9;
+  border-radius: 8px;
+  background: #fceeea;
+  color: #6d2718;
+  font-size: 13px;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.form-row {
+  display: grid;
+  gap: 0;
+}
+
+/* ── Dashboard ─────────────────────────────────────────────────────────── */
+
+.empty-card {
+  padding: 32px 24px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+  text-align: center;
+}
+
+.empty-title {
+  margin: 0 0 8px;
+  font-size: 17px;
+  color: var(--forest);
+}
+
+.empty-body {
+  max-width: 52ch;
+  margin: 0 auto 16px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.project-card {
+  display: block;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  color: inherit;
+  text-decoration: none;
+}
+
+.project-card:hover {
+  border-color: var(--sage);
+}
+
+.project-card-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.project-card-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--forest);
+}
+
+.project-card-job {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.project-card-client {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.project-card-health {
+  margin: 10px 0 0;
+  font-size: 13px;
+}
+
+.health-late {
+  color: var(--clay);
+  font-weight: 700;
+}
+
+.health-blocked {
+  color: var(--gold);
+  font-weight: 700;
+}
+
+.project-card-milestone {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--sage);
+  font-weight: 600;
+}
+
+/* ── Mini calendar (dashboard rail) ────────────────────────────────────── */
+
+.minical {
+  position: sticky;
+  top: 24px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+}
+
+.minical-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--forest);
+}
+
+.minical-more {
+  font-size: 12px;
+  color: var(--sage);
+}
+
+.minical-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.minical-dow {
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--muted);
+}
+
+.minical-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-height: 30px;
+  padding: 3px 0 1px;
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+.minical-day--out {
+  color: #c0c4bd;
+}
+
+.minical-day--today {
+  background: var(--forest);
+  color: #fff;
+  font-weight: 700;
+}
+
+.minical-dots {
+  display: flex;
+  gap: 2px;
+}
+
+.minical-dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+}
+
+/* ── Zoom / month nav ──────────────────────────────────────────────────── */
+
+.zoom {
+  display: flex;
+  gap: 4px;
+}
+
+.zoom-link {
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.zoom-link--on {
+  border-color: var(--forest);
+  background: var(--forest);
+  color: #fff;
+}
+
+/* ── Gantt ─────────────────────────────────────────────────────────────── */
+
+.gantt {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  overflow: hidden;
+}
+
+.gantt-scroll {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  overflow-x: auto;
+}
+
+.gantt-names {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--paper);
+  border-right: 1px solid var(--line);
+}
+
+.gantt-name {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 12px;
+  border-top: 1px solid #f0efe8;
+}
+
+.gantt-name-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gantt-name-who {
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gantt-board {
+  position: relative;
+  touch-action: pan-y;
+}
+
+.gantt-offday {
+  position: absolute;
+  top: 0;
+  background: #f0efe7;
+}
+
+.gantt-month {
+  position: absolute;
+  top: 5px;
+  padding-left: 5px;
+  border-left: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.gantt-today {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  background: var(--clay);
+  z-index: 1;
+}
+
+.gantt-arrows {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.gantt-arrow {
+  fill: none;
+  stroke: #b9beb6;
+  stroke-width: 1.5;
+}
+
+.gantt-bar {
+  position: absolute;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: grab;
+  touch-action: none;
+  z-index: 1;
+}
+
+.gantt-bar:active {
+  cursor: grabbing;
+}
+
+.gantt-bar--critical {
+  box-shadow: 0 0 0 2px var(--clay);
+}
+
+.gantt-bar--done {
+  opacity: 0.45;
+}
+
+.gantt-bar--blocked {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 6px,
+    rgb(0 0 0 / 0.18) 6px 12px
+  );
+}
+
+.gantt-bar-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gantt-milestone {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: none;
+  padding: 0;
+  background: var(--gold);
+  transform: rotate(45deg) translate(-50%, 0);
+  transform-origin: top left;
+  cursor: grab;
+  touch-action: none;
+  z-index: 1;
+}
+
+.gantt-hint {
+  margin: 0;
+  padding: 10px 14px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.gantt-notice {
+  min-height: 30px;
+  padding: 4px 14px 10px;
+  font-size: 13px;
+  color: var(--forest);
+}
+
+/* ── Task table ────────────────────────────────────────────────────────── */
+
+.tasklist {
+  margin-top: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  overflow-x: auto;
+}
+
+.tasklist-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.tasklist-table th {
+  padding: 12px 14px 8px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+
+.tasklist-table td {
+  padding: 8px 14px;
+  border-bottom: 1px solid #f0efe8;
+  vertical-align: middle;
+}
+
+.tasklist-row--done {
+  opacity: 0.55;
+}
+
+.tag-critical {
+  color: var(--clay);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.cell-input {
+  min-height: 38px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+}
+
+.cell-input--num {
+  width: 74px;
+}
+
+.cell-who {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── Month calendar ────────────────────────────────────────────────────── */
+
+.cal {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.cal-dow {
+  padding: 8px 10px;
+  background: var(--paper);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.cal-day {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 104px;
+  padding: 6px;
+  background: var(--paper);
+}
+
+.cal-day--out {
+  background: #f1f0e9;
+}
+
+.cal-day--today {
+  box-shadow: inset 0 0 0 2px var(--clay);
+}
+
+.cal-date {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.cal-chip {
+  display: block;
+  padding: 3px 7px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cal-more {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ── Crew ──────────────────────────────────────────────────────────────── */
+
+.crew-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.crew-card {
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+}
+
+.crew-swatch {
+  flex: none;
+  width: 10px;
+  border-radius: 999px;
+}
+
+.crew-name {
+  margin: 0;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--forest);
+}
+
+.crew-meta {
+  margin: 2px 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.crew-contact {
+  margin: 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* ── Responsive ────────────────────────────────────────────────────────── */
+
+@media (max-width: 960px) {
+  .page--split {
+    grid-template-columns: 1fr;
+  }
+
+  .page-rail {
+    order: -1;
+  }
+
+  .minical {
+    position: static;
+  }
+}
+
+@media (max-width: 760px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .rail {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .rail-org,
+  .rail-signout-form {
+    margin: 0;
+  }
+
+  .rail-org-user,
+  .rail-heading,
+  .rail-empty {
+    display: none;
+  }
+
+  .rail-nav {
+    flex-direction: row;
+  }
+
+  .rail-projects {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+  }
+
+  .rail-section {
+    width: 100%;
+  }
+
+  .page {
+    padding: 16px 12px 64px;
+  }
+
+  .gantt-scroll {
+    grid-template-columns: 130px 1fr;
+  }
+
+  .cal-day {
+    min-height: 72px;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .gantt-bar {
+    transition: left 80ms linear;
+  }
+}

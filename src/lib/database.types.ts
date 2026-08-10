@@ -577,6 +577,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_task_moves: {
+        Args: {
+          p_moves: Json
+          p_source?: Database["public"]["Enums"]["change_source"]
+          p_transcript?: string | null
+        }
+        Returns: number
+      }
       auth_org_ids: { Args: never; Returns: string[] }
       create_org_with_owner: {
         Args: {
