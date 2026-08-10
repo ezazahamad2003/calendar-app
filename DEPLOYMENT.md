@@ -10,9 +10,10 @@ Vercel redeploys on every push to `main`.
 
 ## 1. Vercel environment variables
 
-**Settings → Environment Variables.** `NEXT_PUBLIC_*` is inlined at build time
-and the rest is validated at boot by `src/instrumentation.ts`, so a missing
-value fails the deploy rather than starting up broken.
+**Settings → Environment Variables**, scope **Production**. `NEXT_PUBLIC_*` is
+inlined at build time and the rest is validated at boot by
+`src/instrumentation.ts`, so a missing value fails the deploy rather than
+starting up broken.
 
 | Variable | Production value |
 |---|---|
@@ -21,32 +22,31 @@ value fails the deploy rather than starting up broken.
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | same as local |
 | `TOKEN_ENCRYPTION_KEY` | same as local (secret) |
 | `CRON_SECRET` | same as local (secret) |
+| `OPENAI_API_KEY` | same as local (secret) — voice + planner |
+| `SUPABASE_SECRET_KEY` | same as local (secret) — `ms_connections` is server-only |
+| `MS_CLIENT_ID` | same as local |
+| `MS_CLIENT_SECRET` | same as local (secret) |
+| `MS_TENANT_ID` | `common` |
+| `MS_SCOPES` | `offline_access User.Read Mail.Send Calendars.ReadWrite` |
+| `MS_REDIRECT_URI` | **differs from local:** `https://calendar-app-nine-brown.vercel.app/api/microsoft/callback` |
 
 > **No trailing slash on `NEXT_PUBLIC_APP_URL`.** It is concatenated with
-> `/auth/callback`, and a double slash will not match Supabase's allow-list.
+> `/auth/callback`.
 
-Do not set `NODE_ENV`, `VERCEL_ENV` or `VERCEL_URL` — the platform provides all
-three.
+Do not set `NODE_ENV`, `VERCEL_ENV` or `VERCEL_URL` — the platform provides them.
 
-### Deliberately not set yet
+`DATABASE_URL` / `DIRECT_URL` stay off Vercel: migrations only, run from your
+machine. The app reaches Supabase over HTTP and holds no Postgres connections.
 
-| Variable | Add at | Why not now |
-|---|---|---|
-| `SUPABASE_SECRET_KEY` | when `createAdminClient()` is first imported | Nothing imports it. Onboarding uses the `create_org_with_owner()` RPC. |
-| `DATABASE_URL`, `DIRECT_URL` | probably never | Migrations only, run from your machine. The app talks to Supabase over HTTP. |
-| `OPENAI_API_KEY` | Phase 5 | Voice pipeline not built. |
-| `MS_*` | Phase 7 | Graph not wired. |
-
-**Changing any variable requires a redeploy**, not a restart. Vercel does not
-apply them retroactively.
+**Changing any variable requires a redeploy.** Vercel does not apply them
+retroactively.
 
 ---
 
 ## 2. Supabase — Authentication → URL Configuration
 
-This is the step whose absence looks exactly like an application bug. Supabase
-only redirects to URLs on its allow-list; anything else is silently replaced
-with the Site URL, so users land on `localhost:3000` from their email.
+Supabase only redirects to URLs on its allow-list; anything else is silently
+replaced with the Site URL, so users land on `localhost:3000` from their email.
 
 **Site URL**
 
@@ -54,7 +54,7 @@ with the Site URL, so users land on `localhost:3000` from their email.
 https://calendar-app-nine-brown.vercel.app
 ```
 
-**Redirect URLs** — add all three, keep localhost so local dev keeps working:
+**Redirect URLs**
 
 ```
 https://calendar-app-nine-brown.vercel.app/auth/callback
@@ -62,63 +62,64 @@ https://calendar-app-*-ezazahamad2003s-projects.vercel.app/auth/callback
 http://localhost:3000/auth/callback
 ```
 
-The middle entry covers preview deployments. `src/lib/app-url.ts` points a
-preview's magic links back at that same preview rather than at production, and
-this is what allow-lists them.
+The wildcard covers preview deployments; `src/lib/app-url.ts` points a
+preview's magic links back at that same preview rather than production.
+
+**Authentication → Sign In / Providers → Email**: keep "Confirm email" **off**
+while testing, back **on** before real users.
 
 ---
 
-## 3. Supabase — email confirmation
+## 3. Azure — Entra admin center → App registrations → your app
 
-**Authentication → Sign In / Providers → Email.**
-
-With "Confirm email" on, signup stops at *"check your email"* until the link is
-clicked. That is correct behaviour, but it makes the register → org → dashboard
-flow untestable without inbox access.
-
-Turn it **off** while testing. Turn it back **on** before real users.
-
-Magic-link sign-in works either way, and is the better thing to test first.
-
----
-
-## 4. Azure — only needed at Phase 7
-
-Graph is not wired yet, so nothing here affects the app today. Registering the
-redirect URIs now is harmless and saves a round trip later.
-
-**Entra admin center → App registrations → your app → Authentication →
-Redirect URIs (Web):**
+**Authentication → Redirect URIs (Web)** — both, byte-exact:
 
 ```
 http://localhost:3000/api/microsoft/callback
 https://calendar-app-nine-brown.vercel.app/api/microsoft/callback
 ```
 
-Entra compares the whole string exactly. A trailing slash, or `http` where the
+Entra compares the whole string. A trailing slash, or `http` where the
 registration says `https`, fails with `AADSTS50011`.
 
-Set `MS_REDIRECT_URI` to whichever one matches the environment. Phase 7 is also
-blocked on publisher verification, per SPEC §2.
+**API permissions → Microsoft Graph → Delegated** — all four, all
+self-consentable (no admin consent needed):
+
+```
+User.Read   Mail.Send   Calendars.ReadWrite   offline_access
+```
+
+**Supported account types** must include personal Microsoft accounts, matching
+`MS_TENANT_ID=common`.
+
+Publisher verification is not required to test with a personal Microsoft
+account; it only removes the unverified-publisher warning on the consent screen.
 
 ---
 
-## 5. Smoke test after configuring
+## 4. Smoke test
 
-1. `https://calendar-app-nine-brown.vercel.app/` → should 307 to `/login`
-2. Sign up with a real address → lands on `/onboarding`
-3. Create a company, pick a timezone → lands on the dashboard, empty state
-4. Sign out → back to `/login`
-5. Sign in via **Email link** → the email should point at
-   `calendar-app-nine-brown.vercel.app`, not `localhost`
+1. `/` → 307 to `/login`
+2. Create an account → `/onboarding` → company + timezone → dashboard
+3. **Seed a demo project** → Gantt with six trades, a milestone and crew
+4. Drag a bar → dependents cascade, dates stay on working days
+5. Voice bar: type *"Push framing back two weeks and let Tom know"* → read the
+   diff → **Confirm**
+6. **Outbox** → the queued email is there → **Send**
+7. **Connect Outlook** in the left rail → consent → banner shows connected
+8. Outbox → send again → arrives in a real inbox
 
-If step 5 sends you to localhost, the Site URL in §2 is wrong or the deploy
-predates the `NEXT_PUBLIC_APP_URL` change.
+Steps 1–6 work with no Microsoft connection at all; sends are labelled
+*simulated*. Step 7 is the only part that needs Azure.
+
+If step 5's email points at localhost, `NEXT_PUBLIC_APP_URL` is stale — set it
+and redeploy.
 
 ---
 
-## Known state
+## What is built
 
-Phases 0–2 and 4 are complete. Phase 3 (dashboard, Gantt, calendar on real
-data) is not built, so the dashboard is an empty state by design. Phases 5–6
-are not started. Phase 7 is blocked externally.
+Phases 0–7 are complete. Phase 7's OAuth round-trip is the one thing never
+executed from a development machine — a consent screen cannot be clicked
+headlessly — so `tests/graph/real.integration.test.ts` holds `describe.skip`
+tests naming exactly what to run against a live consented account.
