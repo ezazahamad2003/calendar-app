@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/server";
-import { getEnv } from "@/lib/env";
+import { getAppOrigin } from "@/lib/app-url";
 
 /**
  * Auth server actions. Every one of these validates its input with Zod before
@@ -103,7 +103,7 @@ export async function signUp(
   const { data, error } = await supabase.auth.signUp({
     ...parsed.data,
     options: {
-      emailRedirectTo: `${getEnv().NEXT_PUBLIC_APP_URL}/auth/callback`,
+      emailRedirectTo: `${getAppOrigin()}/auth/callback`,
     },
   });
 
@@ -135,7 +135,7 @@ export async function sendMagicLink(
   const { error } = await supabase.auth.signInWithOtp({
     email: parsed.data.email,
     options: {
-      emailRedirectTo: `${getEnv().NEXT_PUBLIC_APP_URL}/auth/callback`,
+      emailRedirectTo: `${getAppOrigin()}/auth/callback`,
     },
   });
 

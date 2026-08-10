@@ -1,82 +1,124 @@
-# Deploying Foreman to Vercel
+# Deploying Foreman
 
-Repo: <https://github.com/ezazahamad2003/calendar-app> (branch `main`)
+- Repo: <https://github.com/ezazahamad2003/calendar-app> (`main`)
+- Production: <https://calendar-app-nine-brown.vercel.app>
+- Supabase project: `iksrtkijgsemqhixgtoz` (ca-central-1)
 
-## 1. Import the repo (do this in the dashboard)
+Vercel redeploys on every push to `main`.
 
-Vercel → **Add New → Project → Import Git Repository → `calendar-app`**.
+---
 
-Framework detection picks up Next.js on its own; leave the build settings alone.
-Do not use a direct file upload — importing from git is what gets you automatic
-deploys on push and preview deployments per branch.
+## 1. Vercel environment variables
 
-## 2. Environment variables
+**Settings → Environment Variables.** `NEXT_PUBLIC_*` is inlined at build time
+and the rest is validated at boot by `src/instrumentation.ts`, so a missing
+value fails the deploy rather than starting up broken.
 
-Set these under **Settings → Environment Variables** before the first deploy.
-The build inlines `NEXT_PUBLIC_*` at build time, and `src/instrumentation.ts`
-validates the rest at boot, so a deploy with these missing fails rather than
-starting up broken.
+| Variable | Production value |
+|---|---|
+| `NEXT_PUBLIC_APP_URL` | `https://calendar-app-nine-brown.vercel.app` |
+| `NEXT_PUBLIC_SUPABASE_URL` | same as local |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | same as local |
+| `TOKEN_ENCRYPTION_KEY` | same as local (secret) |
+| `CRON_SECRET` | same as local (secret) |
 
-### Required now (Phase 2)
+> **No trailing slash on `NEXT_PUBLIC_APP_URL`.** It is concatenated with
+> `/auth/callback`, and a double slash will not match Supabase's allow-list.
 
-| Variable | Value | Notes |
-|---|---|---|
-| `NEXT_PUBLIC_APP_URL` | `https://<your-project>.vercel.app` | **Must change from localhost.** Magic links and email confirmations are built from this. |
-| `NEXT_PUBLIC_SUPABASE_URL` | same as local | Public by design. |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | same as local | Public by design; RLS is what protects the data. |
-| `TOKEN_ENCRYPTION_KEY` | same as local | Secret. |
-| `CRON_SECRET` | same as local | Secret. |
+Do not set `NODE_ENV`, `VERCEL_ENV` or `VERCEL_URL` — the platform provides all
+three.
 
-Leave `NODE_ENV` alone — Vercel sets it.
-
-### Deliberately *not* set yet
-
-Fewer secrets in more places is worse, so hold these until the phase that needs
-them:
+### Deliberately not set yet
 
 | Variable | Add at | Why not now |
 |---|---|---|
-| `SUPABASE_SECRET_KEY` | when `createAdminClient()` is first imported | Nothing imports it today. Onboarding goes through the `create_org_with_owner()` RPC, so no code path needs the secret key. |
-| `DATABASE_URL`, `DIRECT_URL` | never, probably | Only migrations use them, and those run from your machine. The app talks to Supabase over HTTP via PostgREST and holds no Postgres connections. |
-| `OPENAI_API_KEY` | Phase 5 | Voice pipeline isn't built. |
-| `MS_*` | Phase 7 | Graph isn't wired. |
+| `SUPABASE_SECRET_KEY` | when `createAdminClient()` is first imported | Nothing imports it. Onboarding uses the `create_org_with_owner()` RPC. |
+| `DATABASE_URL`, `DIRECT_URL` | probably never | Migrations only, run from your machine. The app talks to Supabase over HTTP. |
+| `OPENAI_API_KEY` | Phase 5 | Voice pipeline not built. |
+| `MS_*` | Phase 7 | Graph not wired. |
 
-## 3. Point Supabase Auth at the deployed URL
+**Changing any variable requires a redeploy**, not a restart. Vercel does not
+apply them retroactively.
 
-**This is the step that is easy to miss and breaks sign-in in a way that looks
-like a bug in the app.** Supabase only redirects to URLs on its allow-list; the
-`emailRedirectTo` the code sends is ignored otherwise, and users land back on
-`localhost:3000` from their email.
+---
 
-Supabase dashboard → **Authentication → URL Configuration**:
+## 2. Supabase — Authentication → URL Configuration
 
-- **Site URL** → `https://<your-project>.vercel.app`
-- **Redirect URLs** → add both:
-  - `https://<your-project>.vercel.app/auth/callback`
-  - `https://*-<your-team>.vercel.app/auth/callback` (preview deployments)
+This is the step whose absence looks exactly like an application bug. Supabase
+only redirects to URLs on its allow-list; anything else is silently replaced
+with the Site URL, so users land on `localhost:3000` from their email.
 
-Keep `http://localhost:3000/auth/callback` in the list so local dev keeps working.
+**Site URL**
 
-## 4. Email confirmation
+```
+https://calendar-app-nine-brown.vercel.app
+```
 
-Supabase ships with "Confirm email" on. With it on, signup stops at *"check your
-email"* until the user clicks the link — which is correct behaviour, but means
-the register → org → dashboard flow can't be completed without inbox access.
+**Redirect URLs** — add all three, keep localhost so local dev keeps working:
 
-Turn it off under **Authentication → Sign In / Providers → Email** while
-developing, and turn it back on before real users.
+```
+https://calendar-app-nine-brown.vercel.app/auth/callback
+https://calendar-app-*-ezazahamad2003s-projects.vercel.app/auth/callback
+http://localhost:3000/auth/callback
+```
 
-## 5. Redeploying after env changes
+The middle entry covers preview deployments. `src/lib/app-url.ts` points a
+preview's magic links back at that same preview rather than at production, and
+this is what allow-lists them.
 
-Environment variables are read at build time for `NEXT_PUBLIC_*` and at boot for
-the rest. Changing either requires a **redeploy**, not just a restart — Vercel
-does not retroactively apply them to an existing deployment.
+---
 
-## Known gap
+## 3. Supabase — email confirmation
 
-The prototype API routes under `src/app/api/` still ship in the build. They
-write to the local filesystem via `src/lib/schedule-store.ts`, which is
-read-only on Vercel, so every one of them 500s if called. They are unreachable
-from the UI (nothing links to them) and are removed in Phase 3. They also read
-`OPENAI_TTS_MODEL` and `OPENAI_TTS_VOICE`, which are not declared in
-`.env.example` or `src/lib/env.ts`.
+**Authentication → Sign In / Providers → Email.**
+
+With "Confirm email" on, signup stops at *"check your email"* until the link is
+clicked. That is correct behaviour, but it makes the register → org → dashboard
+flow untestable without inbox access.
+
+Turn it **off** while testing. Turn it back **on** before real users.
+
+Magic-link sign-in works either way, and is the better thing to test first.
+
+---
+
+## 4. Azure — only needed at Phase 7
+
+Graph is not wired yet, so nothing here affects the app today. Registering the
+redirect URIs now is harmless and saves a round trip later.
+
+**Entra admin center → App registrations → your app → Authentication →
+Redirect URIs (Web):**
+
+```
+http://localhost:3000/api/microsoft/callback
+https://calendar-app-nine-brown.vercel.app/api/microsoft/callback
+```
+
+Entra compares the whole string exactly. A trailing slash, or `http` where the
+registration says `https`, fails with `AADSTS50011`.
+
+Set `MS_REDIRECT_URI` to whichever one matches the environment. Phase 7 is also
+blocked on publisher verification, per SPEC §2.
+
+---
+
+## 5. Smoke test after configuring
+
+1. `https://calendar-app-nine-brown.vercel.app/` → should 307 to `/login`
+2. Sign up with a real address → lands on `/onboarding`
+3. Create a company, pick a timezone → lands on the dashboard, empty state
+4. Sign out → back to `/login`
+5. Sign in via **Email link** → the email should point at
+   `calendar-app-nine-brown.vercel.app`, not `localhost`
+
+If step 5 sends you to localhost, the Site URL in §2 is wrong or the deploy
+predates the `NEXT_PUBLIC_APP_URL` change.
+
+---
+
+## Known state
+
+Phases 0–2 and 4 are complete. Phase 3 (dashboard, Gantt, calendar on real
+data) is not built, so the dashboard is an empty state by design. Phases 5–6
+are not started. Phase 7 is blocked externally.
