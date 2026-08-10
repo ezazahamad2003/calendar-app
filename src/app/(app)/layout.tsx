@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireMembership } from "@/lib/auth/dal";
 import { listProjectsWithHealth } from "@/lib/org/queries";
 import { signOut } from "@/app/(auth)/actions";
+import { msConnectionState } from "@/lib/graph/factory";
 import { VoiceBar } from "./voice-bar";
 
 /**
@@ -16,7 +17,10 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const membership = await requireMembership();
-  const projects = await listProjectsWithHealth(membership.orgId, membership.timezone);
+  const [projects, msState] = await Promise.all([
+    listProjectsWithHealth(membership.orgId, membership.timezone),
+    msConnectionState(membership.orgId, membership.userId),
+  ]);
 
   return (
     <div className="shell">
@@ -36,7 +40,22 @@ export default async function AppLayout({
           <Link className="rail-link" href="/crew">
             Crew
           </Link>
+          <Link className="rail-link" href="/outbox">
+            Outbox
+          </Link>
         </nav>
+
+        <div className="rail-ms">
+          {msState.connected ? (
+            <p className="rail-ms-ok" title={msState.email ?? undefined}>
+              ✓ Outlook connected
+            </p>
+          ) : (
+            <a className="rail-ms-connect" href="/api/microsoft/connect">
+              Connect Outlook
+            </a>
+          )}
+        </div>
 
         <div className="rail-section">
           <p className="rail-heading">Projects</p>
@@ -68,6 +87,13 @@ export default async function AppLayout({
       </aside>
 
       <div className="shell-main">
+        {msState.needsReauth ? (
+          <div className="reauth-banner" role="alert">
+            Outlook lost its connection — mail and calendar invites are paused
+            until you <a href="/api/microsoft/connect">reconnect</a>. Nothing
+            queued has been lost.
+          </div>
+        ) : null}
         {children}
         <VoiceBar />
       </div>

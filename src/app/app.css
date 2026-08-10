@@ -1074,3 +1074,115 @@
     left: 0;
   }
 }
+
+/* ── Outbox + Microsoft connection (Phases 6–7) ────────────────────────── */
+
+.rail-ms {
+  padding: 0 10px;
+}
+
+.rail-ms-ok {
+  margin: 0;
+  font-size: 12px;
+  color: #9db4ac;
+}
+
+.rail-ms-connect {
+  display: inline-block;
+  padding: 8px 10px;
+  border: 1px solid var(--forest-2);
+  border-radius: 8px;
+  color: #e8ede9;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.rail-ms-connect:hover {
+  background: var(--forest-2);
+}
+
+.reauth-banner {
+  margin: 12px 24px 0;
+  padding: 12px 14px;
+  border: 1px solid #e3d2b0;
+  border-radius: 10px;
+  background: #f7efe2;
+  color: #5d4a22;
+  font-size: 14px;
+}
+
+.reauth-banner a {
+  font-weight: 700;
+  color: inherit;
+}
+
+.outbox-mode {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.outbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.outbox-item {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+}
+
+.outbox-item--failed {
+  border-color: #f0c5b9;
+}
+
+.outbox-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: baseline;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.outbox-status {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  background: var(--canvas);
+}
+
+.outbox-status--sent { background: #eaf3f1; color: #234945; }
+.outbox-status--queued { background: #f7efe2; color: #5d4a22; }
+.outbox-status--failed { background: #fceeea; color: #6d2718; }
+
+.outbox-when { margin-left: auto; }
+
+.outbox-subject {
+  margin: 0 0 4px;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.outbox-body {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+
+.outbox-bodyedit {
+  resize: vertical;
+  min-height: 120px;
+}
