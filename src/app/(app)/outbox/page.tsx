@@ -43,7 +43,13 @@ export default async function OutboxPage() {
         </div>
       </header>
 
-      {!connection.connected ? (
+      {!connection.available ? (
+        <p className="outbox-mode">
+          Outlook isn&rsquo;t set up in this environment, so sends are{" "}
+          <strong>simulated</strong> — messages get marked sent without leaving
+          the app.
+        </p>
+      ) : !connection.connected ? (
         <p className="outbox-mode">
           Outlook isn&rsquo;t connected, so sends are <strong>simulated</strong> —
           messages get marked sent without leaving the app.{" "}

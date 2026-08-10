@@ -45,17 +45,21 @@ export default async function AppLayout({
           </Link>
         </nav>
 
-        <div className="rail-ms">
-          {msState.connected ? (
-            <p className="rail-ms-ok" title={msState.email ?? undefined}>
-              ✓ Outlook connected
-            </p>
-          ) : (
-            <a className="rail-ms-connect" href="/api/microsoft/connect">
-              Connect Outlook
-            </a>
-          )}
-        </div>
+        {/* Hidden entirely when the integration isn't configured — offering a
+            button that cannot work is worse than offering nothing. */}
+        {msState.available ? (
+          <div className="rail-ms">
+            {msState.connected ? (
+              <p className="rail-ms-ok" title={msState.email ?? undefined}>
+                ✓ Outlook connected
+              </p>
+            ) : (
+              <a className="rail-ms-connect" href="/api/microsoft/connect">
+                Connect Outlook
+              </a>
+            )}
+          </div>
+        ) : null}
 
         <div className="rail-section">
           <p className="rail-heading">Projects</p>

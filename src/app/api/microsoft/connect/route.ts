@@ -21,6 +21,29 @@ export async function GET(request: NextRequest) {
   }
 
   const env = getEnv();
+
+  // A half-configured environment should say so, not throw a 500. All four are
+  // needed: the first three to run the flow, the secret key to store the
+  // resulting refresh token in a table only it can reach.
+  const missing = (
+    [
+      ["MS_CLIENT_ID", env.MS_CLIENT_ID],
+      ["MS_CLIENT_SECRET", env.MS_CLIENT_SECRET],
+      ["MS_REDIRECT_URI", env.MS_REDIRECT_URI],
+      ["SUPABASE_SECRET_KEY", env.SUPABASE_SECRET_KEY],
+    ] as const
+  )
+    .filter(([, value]) => !value)
+    .map(([name]) => name);
+
+  if (missing.length > 0) {
+    return NextResponse.redirect(
+      `${request.nextUrl.origin}/?ms_error=${encodeURIComponent(
+        `Outlook isn't configured here — missing ${missing.join(", ")}.`,
+      )}`,
+    );
+  }
+
   const clientId = requireEnv("MS_CLIENT_ID");
   const redirectUri = requireEnv("MS_REDIRECT_URI");
 

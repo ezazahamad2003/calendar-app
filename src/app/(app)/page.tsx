@@ -12,7 +12,15 @@ import { NewProjectForm } from "./new-project-form";
  * The morning screen (SPEC §7): every active project with its health line,
  * and this month at a glance on the right.
  */
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ms_error?: string; ms_connected?: string }>;
+}) {
+  // The Microsoft callback can only report back through the URL, so these are
+  // the sole channel for "connected" / "that didn't work". Rendering them here
+  // is what stops an OAuth failure from being silent.
+  const { ms_error: msError, ms_connected: msConnected } = await searchParams;
   const m = await requireMembership();
   const today = todayInZone(m.timezone);
   const grid = monthGrid(today.slice(0, 7));
@@ -49,6 +57,17 @@ export default async function DashboardPage() {
             <h1 className="page-title">Today</h1>
           </div>
         </header>
+
+        {msError ? (
+          <p className="form-error" role="alert">
+            {msError}
+          </p>
+        ) : null}
+        {msConnected ? (
+          <p className="auth-notice">
+            Outlook connected. Messages in the outbox now send for real.
+          </p>
+        ) : null}
 
         {projects.length === 0 ? (
           <section className="empty-card">
