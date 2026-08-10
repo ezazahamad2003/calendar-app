@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireMembership } from "@/lib/auth/dal";
 import { listProjectsWithHealth } from "@/lib/org/queries";
 import { signOut } from "@/app/(auth)/actions";
+import { VoiceBar } from "./voice-bar";
 
 /**
  * Authenticated shell. Projects and crew live in the left rail (SPEC §7's
@@ -66,7 +67,10 @@ export default async function AppLayout({
         </form>
       </aside>
 
-      <div className="shell-main">{children}</div>
+      <div className="shell-main">
+        {children}
+        <VoiceBar />
+      </div>
     </div>
   );
 }

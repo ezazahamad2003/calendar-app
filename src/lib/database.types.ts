@@ -577,6 +577,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_plan_writes: {
+        Args: {
+          p_org_id: string
+          p_ops: Json
+          p_source?: Database["public"]["Enums"]["change_source"]
+          p_transcript?: string | null
+        }
+        Returns: Json
+      }
       apply_task_moves: {
         Args: {
           p_moves: Json
