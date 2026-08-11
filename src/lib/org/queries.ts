@@ -172,6 +172,30 @@ export async function getProjectDetail(
   return { project, tasks, deps, contacts: contactsRes.data ?? [], assignments };
 }
 
+/**
+ * Every project, oldest first — the ordering that decides colours.
+ *
+ * Deliberately its own query rather than a field on the calendar's task join:
+ * colour comes from a project's *position among all projects*, so it cannot be
+ * derived from whichever subset of projects happens to have tasks in the
+ * visible window. Two different months would otherwise colour the same job
+ * differently.
+ */
+export async function listProjectOrder(
+  orgId: string,
+): Promise<{ id: string; name: string; color: string | null }[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("projects")
+    .select("id, name, color")
+    .eq("org_id", orgId)
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true }); // tiebreak, so the order is total
+
+  if (error) throw new Error(`Could not load projects: ${error.message}`);
+  return data ?? [];
+}
+
 export async function listContacts(orgId: string): Promise<ContactRow[]> {
   const supabase = await createClient();
   const { data, error } = await supabase

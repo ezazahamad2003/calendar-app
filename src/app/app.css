@@ -102,7 +102,20 @@
   background: var(--forest-2);
 }
 
+/* The rail is the calendar's legend: this dot is the colour that job's bars
+   carry on the grid. A ring rather than a bare swatch so it stays visible on
+   the dark rail whichever palette entry it lands on. */
+.rail-project-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  margin-right: 8px;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.25);
+}
+
 .rail-project-name {
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

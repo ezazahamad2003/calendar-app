@@ -21,16 +21,24 @@ export type ProjectColor = {
   edge: string;
 };
 
+/**
+ * Ordered so that *consecutive* entries are as far apart as possible — green,
+ * red, blue, orange, purple… — rather than grouped by family. Projects are
+ * assigned in creation order, so neighbours in this list are what a user with
+ * two or three jobs actually sees, and "teal then olive" is two greens.
+ */
 const PALETTE: readonly ProjectColor[] = [
-  { fill: "#2f6f68", text: "#ffffff", edge: "#245650" }, // deep teal
-  { fill: "#8c5a2b", text: "#ffffff", edge: "#6d4520" }, // bronze
-  { fill: "#43608c", text: "#ffffff", edge: "#334a6d" }, // indigo
-  { fill: "#7a4370", text: "#ffffff", edge: "#5e3356" }, // mulberry
+  { fill: "#2f6f68", text: "#ffffff", edge: "#245650" }, // teal
   { fill: "#a04b3c", text: "#ffffff", edge: "#7d392d" }, // brick
-  { fill: "#2c7d8c", text: "#ffffff", edge: "#216069" }, // lagoon
-  { fill: "#5c7a35", text: "#ffffff", edge: "#465d28" }, // olive
+  { fill: "#43608c", text: "#ffffff", edge: "#334a6d" }, // indigo
+  { fill: "#8c5a2b", text: "#ffffff", edge: "#6d4520" }, // bronze
   { fill: "#6b5b95", text: "#ffffff", edge: "#524673" }, // iris
+  { fill: "#5c7a35", text: "#ffffff", edge: "#465d28" }, // olive
+  { fill: "#7a4370", text: "#ffffff", edge: "#5e3356" }, // mulberry
+  { fill: "#2c7d8c", text: "#ffffff", edge: "#216069" }, // lagoon
 ];
+
+export const PALETTE_SIZE = PALETTE.length;
 
 /** Colors the planner may pick from by name, when the user asks out loud. */
 export const NAMED_COLORS: Record<string, string> = {
@@ -65,6 +73,42 @@ function readable(fill: string): ProjectColor {
   };
 }
 
+/**
+ * The colour for the Nth project in the org, counting from oldest.
+ *
+ * Assignment by position rather than by hashing the name, because the point of
+ * the colour is telling two jobs apart and a hash cannot promise that: with
+ * eight slots and two projects there is a one-in-eight chance of an outright
+ * collision and a much larger chance of two neighbouring greens. Position
+ * guarantees the first eight jobs are all different, which is more than any
+ * one screen will ever show at once.
+ *
+ * It is still stable — a project's index only changes if an *older* project is
+ * deleted, and then only for the ones after it.
+ */
+export function paletteColor(index: number): ProjectColor {
+  return PALETTE[((index % PALETTE_SIZE) + PALETTE_SIZE) % PALETTE_SIZE];
+}
+
+/**
+ * Colour by id for a whole org, given its projects oldest-first.
+ *
+ * This is the one to use anywhere the full list is available. `projectColor`
+ * below is the fallback for the case where it isn't — chiefly the plan diff,
+ * which has to show a swatch for a project that does not exist yet.
+ */
+export function projectColors(
+  projects: readonly { id: string; name: string; color?: string | null }[],
+): Map<string, ProjectColor> {
+  return new Map(
+    projects.map((p, i) => [
+      p.id,
+      p.color && /^#[0-9a-fA-F]{6}$/.test(p.color) ? readable(p.color) : paletteColor(i),
+    ]),
+  );
+}
+
+/** Name-hashed fallback, for a project with no index yet. */
 export function projectColor(
   name: string,
   explicit?: string | null,
@@ -76,5 +120,5 @@ export function projectColor(
   for (let i = 0; i < key.length; i += 1) {
     hash = (hash * 31 + key.charCodeAt(i)) | 0;
   }
-  return PALETTE[Math.abs(hash) % PALETTE.length];
+  return paletteColor(Math.abs(hash));
 }

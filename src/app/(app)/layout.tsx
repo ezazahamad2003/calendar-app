@@ -4,6 +4,7 @@ import { requireMembership } from "@/lib/auth/dal";
 import { listProjectsWithHealth } from "@/lib/org/queries";
 import { signOut } from "@/app/(auth)/actions";
 import { connectionStates, summarize } from "@/lib/providers/factory";
+import { projectColors } from "@/lib/project-color";
 import { VoicePanel } from "./voice-panel";
 
 /**
@@ -25,6 +26,10 @@ export default async function AppLayout({
     connectionStates(membership.orgId, membership.userId),
   ]);
   const connections = summarize(states);
+  // Same ordering as the calendar's (both created_at ascending), so the dot
+  // beside a job here is the colour its bars carry there. That is the whole
+  // point of the dot — the rail is the calendar's legend.
+  const colors = projectColors(projects.map((p) => p.project));
 
   return (
     <div className="shell">
@@ -92,6 +97,11 @@ export default async function AppLayout({
               {projects.map(({ project, tasksLate }) => (
                 <li key={project.id}>
                   <Link className="rail-project" href={`/projects/${project.id}`}>
+                    <span
+                      className="rail-project-dot"
+                      style={{ background: colors.get(project.id)?.fill }}
+                      aria-hidden
+                    />
                     <span className="rail-project-name">{project.name}</span>
                     {tasksLate > 0 ? (
                       <span className="rail-late" aria-label={`${tasksLate} late`}>

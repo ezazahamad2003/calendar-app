@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { planSchema } from "@/lib/voice/schema";
 import { humanRange } from "@/lib/format-date";
-import { projectColor } from "@/lib/project-color";
+import { PALETTE_SIZE, projectColor, projectColors } from "@/lib/project-color";
 
 /**
  * The two rules that shipped broken, pinned so they cannot drift back.
@@ -83,6 +83,49 @@ describe("dates a person reads", () => {
 });
 
 describe("project colour", () => {
+  it("gives every project in a palette-sized org a different colour", () => {
+    // The bug this replaced: colours were hashed from the name, so two jobs
+    // could collide outright or land on two near-identical greens. Position
+    // makes distinctness a guarantee rather than a probability.
+    const projects = Array.from({ length: PALETTE_SIZE }, (_, i) => ({
+      id: `p${i}`,
+      name: `Project ${i}`,
+    }));
+    const fills = [...projectColors(projects).values()].map((c) => c.fill);
+    expect(new Set(fills).size).toBe(PALETTE_SIZE);
+  });
+
+  it("only repeats once the palette is exhausted", () => {
+    const projects = Array.from({ length: PALETTE_SIZE + 1 }, (_, i) => ({
+      id: `p${i}`,
+      name: `Project ${i}`,
+    }));
+    const colors = projectColors(projects);
+    expect(colors.get(`p${PALETTE_SIZE}`)?.fill).toBe(colors.get("p0")?.fill);
+  });
+
+  it("keeps a job's colour when a newer job is added", () => {
+    const two = projectColors([
+      { id: "a", name: "A" },
+      { id: "b", name: "B" },
+    ]);
+    const three = projectColors([
+      { id: "a", name: "A" },
+      { id: "b", name: "B" },
+      { id: "c", name: "C" },
+    ]);
+    expect(three.get("a")?.fill).toBe(two.get("a")?.fill);
+    expect(three.get("b")?.fill).toBe(two.get("b")?.fill);
+  });
+
+  it("lets an explicit colour override its position", () => {
+    const colors = projectColors([
+      { id: "a", name: "A" },
+      { id: "b", name: "B", color: "#123456" },
+    ]);
+    expect(colors.get("b")?.fill).toBe("#123456");
+  });
+
   it("is stable for the same name", () => {
     expect(projectColor("Chico Empire").fill).toBe(projectColor("Chico Empire").fill);
   });

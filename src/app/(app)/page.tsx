@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { requireMembership } from "@/lib/auth/dal";
-import { tasksOverlapping } from "@/lib/org/queries";
+import { listProjectOrder, tasksOverlapping } from "@/lib/org/queries";
 import type { CalendarTask } from "@/lib/org/queries";
 import { todayInZone } from "@/lib/schedule";
 import {
@@ -15,7 +15,8 @@ import {
 } from "@/lib/calendar";
 import type { CalView } from "@/lib/calendar";
 import { tradeColor } from "@/lib/trades";
-import { projectColor } from "@/lib/project-color";
+import { projectColor, projectColors } from "@/lib/project-color";
+import type { ProjectColor } from "@/lib/project-color";
 
 /**
  * The calendar is the home screen (SPEC §7 wants the schedule front and
@@ -38,13 +39,25 @@ export default async function CalendarHome({
   const anchor = parseAnchor(params.d, today);
   const range = calendarRange(view, anchor);
 
-  const tasks = await tasksOverlapping(m.orgId, range.from, range.to);
+  const [tasks, projectOrder] = await Promise.all([
+    tasksOverlapping(m.orgId, range.from, range.to),
+    listProjectOrder(m.orgId),
+  ]);
+  // Colour is resolved once, here, and rides along on the task. The four views
+  // below would otherwise each need the map threaded through them.
+  const colors = projectColors(projectOrder);
+  const withColor = (task: CalendarTask): ColoredTask => ({
+    ...task,
+    color:
+      colors.get(task.project_id) ?? projectColor(task.project_name, task.project_color),
+  });
 
   /** Tasks active on a given day, in a stable order. */
-  const onDay = (day: string): CalendarTask[] =>
+  const onDay = (day: string): ColoredTask[] =>
     tasks
       .filter((t) => t.start_date && t.end_date && day >= t.start_date && day <= t.end_date)
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map(withColor);
 
   const href = (v: CalView, d: string) => `/?v=${v}&d=${d}`;
 
@@ -116,6 +129,9 @@ export default async function CalendarHome({
   );
 }
 
+/** A calendar task with its project's colour already resolved. */
+type ColoredTask = CalendarTask & { color: ProjectColor };
+
 // ── Views ────────────────────────────────────────────────────────────────────
 
 /**
@@ -127,16 +143,15 @@ export default async function CalendarHome({
  * with the job colour. The Gantt stays trade-first, because inside one project
  * the job is a given and the trade is the whole point.
  */
-function TaskChip({ task, compact = false }: { task: CalendarTask; compact?: boolean }) {
-  const project = projectColor(task.project_name, task.project_color);
+function TaskChip({ task, compact = false }: { task: ColoredTask; compact?: boolean }) {
   const trade = tradeColor(task.trade);
   return (
     <Link
       href={`/projects/${task.project_id}`}
       className={compact ? "cal-chip" : "cal-chip cal-chip--roomy"}
       style={{
-        background: project.fill,
-        color: project.text,
+        background: task.color.fill,
+        color: task.color.text,
         borderLeft: `4px solid ${trade.fill}`,
       }}
       title={`${task.name} — ${task.project_name}${task.trade ? ` · ${task.trade}` : ""}`}
@@ -147,11 +162,11 @@ function TaskChip({ task, compact = false }: { task: CalendarTask; compact?: boo
   );
 }
 
-function DayView({ tasks }: { tasks: CalendarTask[] }) {
+function DayView({ tasks }: { tasks: ColoredTask[] }) {
   if (tasks.length === 0) return null;
 
   // Grouped by project: on a single day, "which jobs need me" is the question.
-  const byProject = new Map<string, CalendarTask[]>();
+  const byProject = new Map<string, ColoredTask[]>();
   for (const t of tasks) {
     const list = byProject.get(t.project_name);
     if (list) list.push(t);
@@ -183,7 +198,7 @@ function WeekView({
 }: {
   days: string[];
   today: string;
-  onDay: (d: string) => CalendarTask[];
+  onDay: (d: string) => ColoredTask[];
 }) {
   const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   return (
@@ -215,7 +230,7 @@ function MonthView({
 }: {
   anchor: string;
   today: string;
-  onDay: (d: string) => CalendarTask[];
+  onDay: (d: string) => ColoredTask[];
 }) {
   const weeks = monthWeeks(anchor);
   const month = anchor.slice(0, 7);
@@ -261,7 +276,7 @@ function YearView({
 }: {
   anchor: string;
   today: string;
-  onDay: (d: string) => CalendarTask[];
+  onDay: (d: string) => ColoredTask[];
 }) {
   return (
     <div className="yearview">
@@ -289,11 +304,7 @@ function YearView({
                 // than trades: at a year's zoom "which jobs are running" is
                 // the only question a dot this small can answer.
                 const colors = [
-                  ...new Set(
-                    onDay(day).map(
-                      (t) => projectColor(t.project_name, t.project_color).fill,
-                    ),
-                  ),
+                  ...new Set(onDay(day).map((t) => t.color.fill)),
                 ].slice(0, 3);
                 return (
                   <Link
