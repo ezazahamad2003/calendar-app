@@ -60,18 +60,31 @@ export async function dispatchQueued(
 
   if (!rows || rows.length === 0) return { sent: 0, failed: 0, mocked: false };
 
-  const { client, mocked } = await providerClientFor(orgId, userId);
+  const { client, mocked, needsReauth } = await providerClientFor(orgId, userId);
   let sent = 0;
   let failed = 0;
 
   for (const row of rows as MessageRow[]) {
-    const ok = await sendOne(orgId, row, client, mocked);
+    const ok = await sendOne(orgId, row, client, mocked, needsReauth);
     if (ok) sent += 1;
     else failed += 1;
   }
 
   return { sent, failed, mocked };
 }
+
+/**
+ * The message shown, and stored, when a connected account has gone stale.
+ *
+ * A dead grant falls back to the mock client, which cheerfully returns a
+ * fixture id — so the row was marked `sent`, the confirmation said "1
+ * notified", and the sub heard nothing. Simulating a send is only honest when
+ * there is no account at all; once someone has connected one, a failure has to
+ * look like a failure.
+ */
+const REAUTH_MESSAGE =
+  "Your email account needs reconnecting — nothing was sent. " +
+  "Reconnect it on the Connections page, then send this from the Outbox.";
 
 /**
  * Send one row. Returns whether it went.
@@ -84,6 +97,7 @@ async function sendOne(
   row: MessageRow,
   client: Awaited<ReturnType<typeof providerClientFor>>["client"],
   mocked: boolean,
+  needsReauth: boolean,
 ): Promise<boolean> {
   const supabase = await createClient();
 
@@ -99,6 +113,9 @@ async function sendOne(
       .eq("id", row.id);
     return false;
   };
+
+  // Before anything else: a stale connection must not be simulated away.
+  if (needsReauth) return fail(REAUTH_MESSAGE);
 
   const { data: contact } = await supabase
     .from("contacts")
@@ -210,8 +227,8 @@ export async function dispatchOne(
   if (!row.subject || !row.body) return { error: "Give it a subject and a body first." };
   if (!row.contact_id) return { error: "That message has no recipient." };
 
-  const { client, mocked } = await providerClientFor(m.orgId, m.userId);
-  const ok = await sendOne(m.orgId, row as MessageRow, client, mocked);
+  const { client, mocked, needsReauth } = await providerClientFor(m.orgId, m.userId);
+  const ok = await sendOne(m.orgId, row as MessageRow, client, mocked, needsReauth);
 
   if (!ok) {
     const { data: after } = await supabase

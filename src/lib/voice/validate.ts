@@ -38,6 +38,9 @@ export function validatePlanIds(plan: Plan, ctx: PlannerContext): Plan {
   // order, so a forward reference would resolve to nothing at apply time.
   const tempIds = new Set<string>();
 
+  /** Contacts this plan creates, so their addresses can be judged too. */
+  const plannedContacts = new Map<string, { name: string; email: string | null }>();
+
   const badId = (kind: string, value: string) =>
     new PlannerError(
       `That plan referenced a ${kind} that does not exist (${value}). ` +
@@ -45,9 +48,14 @@ export function validatePlanIds(plan: Plan, ctx: PlannerContext): Plan {
     );
 
   plan.operations.forEach((op, index) => {
-    const knownTask = (v: string) => taskIds.has(v) || tempIds.has(v);
-    const knownContact = (v: string) => contactIds.has(v) || tempIds.has(v);
-    const knownProject = (v: string) => projectIds.has(v) || tempIds.has(v);
+    // The prefix has to match the kind. "$p0" is a project and nothing else —
+    // without this, `assign_task` could name a project as its contact and pass,
+    // because every temp id lived in one undifferentiated set.
+    const known = (prefix: string, real: Set<string>) => (v: string) =>
+      v.startsWith("$") ? tempIds.has(v) && v.startsWith(prefix) : real.has(v);
+    const knownTask = known("$t", taskIds);
+    const knownContact = known("$c", contactIds);
+    const knownProject = known("$p", projectIds);
 
     switch (op.type) {
       case "create_project":
@@ -89,13 +97,16 @@ export function validatePlanIds(plan: Plan, ctx: PlannerContext): Plan {
       case "send_email": {
         for (const c of op.contactIds) {
           if (!knownContact(c)) throw badId("contact", c);
-          const contact = ctx.contacts.find((x) => x.id === c);
           // Belt and braces: the prompt forbids this, and the code refuses it.
           // A contact created in this same plan has no row to check yet, so it
           // is judged on the address the plan itself supplies.
-          if (contact && !contact.hasEmail) {
+          const contact = ctx.contacts.find((x) => x.id === c);
+          const fresh = plannedContacts.get(c);
+          const name = contact?.name ?? fresh?.name ?? "That contact";
+          const reachable = contact ? contact.hasEmail : Boolean(fresh?.email);
+          if (!reachable) {
             throw new PlannerError(
-              `${contact.name} has no email address on file. Add one on the ` +
+              `${name} has no email address on file. Add one on the ` +
                 `Crew page first — Foreman never guesses an address.`,
             );
           }
@@ -105,6 +116,7 @@ export function validatePlanIds(plan: Plan, ctx: PlannerContext): Plan {
       }
       case "create_contact":
         tempIds.add(`$c${index}`);
+        plannedContacts.set(`$c${index}`, { name: op.name, email: op.email ?? null });
         break;
     }
   });

@@ -97,6 +97,13 @@ booking wastes a day on site.
 not exist, create it. When a real bug is found, add the case that would have
 caught it *before* fixing the bug.
 
+Each case is tagged `[auto]` or `[manual]`. The `[auto]` ones are real tests
+beside it — `plan-ids.test.ts` (the validator) and `preview.test.ts` (the diff
+builder), off the shared fixture in `fixture.ts`. Anything assertable without a
+live model belongs there, not just in prose. `buildPreview` lives in
+`src/lib/voice/preview.ts` rather than `actions.ts` precisely so it can be
+imported by a test.
+
 ## Manual passes that need a person
 
 Flag these clearly rather than attempting them:

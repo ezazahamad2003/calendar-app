@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { applyPlan, askForeman } from "@/lib/voice/actions";
-import type { PlanPreview } from "@/lib/voice/actions";
+import type { PlanPreview } from "@/lib/voice/preview";
 import type { Plan } from "@/lib/voice/schema";
 import type { Turn } from "@/lib/voice/agent";
 import { useDictation } from "./use-dictation";
@@ -434,6 +434,22 @@ function PlanReview({
                   {mv.toStart}
                 </>
               )}
+            </p>
+          ))}
+        </div>
+      ) : null}
+
+      {/* Created tasks with no date. They are not in the Schedule block above
+          because there is nothing to schedule yet — but they are still work
+          this plan creates, and leaving them out left the diff blank. */}
+      {p.newTasks.length > 0 ? (
+        <div className="plan-block">
+          <p className="assistant-label">New work</p>
+          {p.newTasks.map((t, i) => (
+            <p key={`nt${i}`} className="plan-line">
+              <span className="plan-tag plan-tag--new">New</span>{" "}
+              <strong>{t.name}</strong>
+              {t.projectName ? ` · ${t.projectName}` : ""} · no date yet
             </p>
           ))}
         </div>
