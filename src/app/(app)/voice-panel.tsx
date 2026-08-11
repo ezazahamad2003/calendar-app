@@ -1,74 +1,92 @@
 "use client";
 
-import { useCallback, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-import { applyPlan, planCommand } from "@/lib/voice/actions";
-import type { PlanResponse } from "@/lib/voice/actions";
+import { applyPlan, askForeman } from "@/lib/voice/actions";
+import type { PlanPreview } from "@/lib/voice/actions";
+import type { Plan } from "@/lib/voice/schema";
+import type { Turn } from "@/lib/voice/agent";
 import { useDictation } from "./use-dictation";
 
 /**
- * The assistant column (SPEC §5: voice is the headline, typing is for when the
- * site is loud, both go through the same path).
+ * The assistant column: a conversation, not a command line.
  *
- * It lives in the right rail rather than a bar across the bottom because the
- * whole chain is now visible at once — what you said, what it heard, what it
- * plans, what it will send — and that is a column of text, not a strip. The
- * confirm step used to be a full-screen modal over the schedule you were
- * trying to check it against, which is exactly backwards.
+ * It used to be one shot — say a sentence, get a diff, done. Which meant you
+ * could not ask it anything ("is Alex free Tuesday?"), could not correct it
+ * ("make it Wednesday"), and every sentence started from nothing. Most of what
+ * someone running jobs wants to say is a question or a follow-up.
  *
- * Nothing auto-executes. Speak or type → plan → readable diff → Confirm.
+ * So the thread is the interface. Speak or type, it answers; when it wants to
+ * change something the diff appears inline in the thread and waits for
+ * Confirm. Nothing it says is an action — only Confirm is.
  */
 
-type Stage =
-  | { kind: "idle" }
-  | { kind: "listening" }
-  | { kind: "transcribing" }
-  | { kind: "planning" }
-  | { kind: "review"; response: Extract<PlanResponse, { ok: true }> }
-  | { kind: "error"; message: string }
-  | { kind: "done"; message: string };
+type Message =
+  | { kind: "you"; text: string }
+  | { kind: "foreman"; text: string }
+  | { kind: "proposal"; text: string; plan: Plan; preview: PlanPreview; settled: string | null }
+  | { kind: "problem"; text: string };
 
-const STEPS = ["Listening", "Transcribing", "Planning", "Ready"] as const;
-
-function stepIndex(stage: Stage): number {
-  switch (stage.kind) {
-    case "listening":
-      return 0;
-    case "transcribing":
-      return 1;
-    case "planning":
-      return 2;
-    case "review":
-    case "done":
-      return 3;
-    default:
-      return -1;
-  }
-}
+type Phase = "idle" | "transcribing" | "thinking" | "applying";
 
 export function VoicePanel() {
   const router = useRouter();
-  const [stage, setStage] = useState<Stage>({ kind: "idle" });
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [turns, setTurns] = useState<Turn[]>([]);
   const [text, setText] = useState("");
-  const [heard, setHeard] = useState("");
-  const [pending, startTransition] = useTransition();
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [, startTransition] = useTransition();
+  const threadEnd = useRef<HTMLDivElement | null>(null);
 
-  const plan = useCallback((t: string) => {
-    const trimmed = t.trim();
-    if (!trimmed) return;
-    setStage({ kind: "planning" });
-    startTransition(async () => {
-      const response = await planCommand({ text: trimmed });
-      if (!response.ok) setStage({ kind: "error", message: response.error });
-      else setStage({ kind: "review", response });
-    });
-  }, []);
+  const busy = phase !== "idle";
 
-  /** Audio → Whisper → planner, with no tap in between. */
-  const transcribeThenPlan = useCallback(
+  // Follow the conversation as it grows, the way a chat should.
+  useEffect(() => {
+    threadEnd.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+  }, [messages, phase]);
+
+  const send = useCallback(
+    (raw: string) => {
+      const trimmed = raw.trim();
+      if (!trimmed) return;
+
+      setMessages((m) => [...m, { kind: "you", text: trimmed }]);
+      setText("");
+      setPhase("thinking");
+
+      startTransition(async () => {
+        const result = await askForeman({ text: trimmed, history: turns });
+
+        if (!result.ok) {
+          setMessages((m) => [...m, { kind: "problem", text: result.error }]);
+          setPhase("idle");
+          return;
+        }
+
+        setTurns(result.turns);
+        setMessages((m) => [
+          ...m,
+          result.plan && result.preview
+            ? {
+                kind: "proposal" as const,
+                text: result.reply,
+                plan: result.plan,
+                preview: result.preview,
+                settled: null,
+              }
+            : { kind: "foreman" as const, text: result.reply },
+        ]);
+        setPhase("idle");
+      });
+    },
+    [turns],
+  );
+
+  /** Audio → Whisper → the assistant, with no tap in between. */
+  const transcribeThenSend = useCallback(
     async (blob: Blob) => {
-      setStage({ kind: "transcribing" });
+      setPhase("transcribing");
       const form = new FormData();
       form.append("audio", blob);
       try {
@@ -87,30 +105,42 @@ export function VoicePanel() {
         }
 
         if (!res.ok || !payload.text) {
-          setStage({
-            kind: "error",
-            message:
-              payload.error ??
-              `Transcription failed (server said ${res.status}). ` +
-                `If this keeps happening, the OpenAI key may be missing.`,
-          });
+          setMessages((m) => [
+            ...m,
+            {
+              kind: "problem",
+              text:
+                payload.error ??
+                `Transcription failed (server said ${res.status}). ` +
+                  `If this keeps happening, the OpenAI key may be missing.`,
+            },
+          ]);
+          setPhase("idle");
           return;
         }
-        setHeard(payload.text);
-        setText(payload.text);
-        plan(payload.text);
+        send(payload.text);
       } catch {
         // Only a genuine network failure reaches here now.
-        setStage({ kind: "error", message: "No connection. Try again when you have signal." });
+        setMessages((m) => [
+          ...m,
+          { kind: "problem", text: "No connection. Try again when you have signal." },
+        ]);
+        setPhase("idle");
       }
     },
-    [plan],
+    [send],
   );
 
   const mic = useDictation({
-    onAudio: (blob) => void transcribeThenPlan(blob),
-    onEmpty: (reason) => setStage({ kind: "error", message: reason }),
-    onError: (message) => setStage({ kind: "error", message }),
+    onAudio: (blob) => void transcribeThenSend(blob),
+    onEmpty: (reason) => {
+      setMessages((m) => [...m, { kind: "problem", text: reason }]);
+      setPhase("idle");
+    },
+    onError: (message) => {
+      setMessages((m) => [...m, { kind: "problem", text: message }]);
+      setPhase("idle");
+    },
   });
 
   function toggleMic() {
@@ -118,21 +148,27 @@ export function VoicePanel() {
       mic.stop();
       return;
     }
-    setHeard("");
-    setStage({ kind: "listening" });
     void mic.start();
   }
 
-  function confirm() {
-    if (stage.kind !== "review") return;
-    const { plan: proposed, transcript } = stage.response;
-    setStage({ kind: "planning" });
+  /** Confirm a proposal, then tell the assistant what happened. */
+  function confirm(index: number) {
+    const message = messages[index];
+    if (message?.kind !== "proposal" || message.settled) return;
+
+    setPhase("applying");
     startTransition(async () => {
-      const result = await applyPlan({ plan: proposed, transcript });
+      const result = await applyPlan({
+        plan: message.plan,
+        transcript: message.text,
+      });
+
       if (!result.ok) {
-        setStage({ kind: "error", message: result.error });
+        setMessages((m) => [...m, { kind: "problem", text: result.error }]);
+        setPhase("idle");
         return;
       }
+
       const notes: string[] = [];
       if (result.notified > 0) {
         notes.push(
@@ -142,40 +178,108 @@ export function VoicePanel() {
         );
       }
       if (result.notifyFailed > 0) notes.push(`${result.notifyFailed} failed — see Outbox`);
-      setStage({
-        kind: "done",
-        message: notes.length > 0 ? `${result.summary} · ${notes.join(", ")}` : result.summary,
-      });
-      setText("");
+      const settled = notes.length > 0 ? `Done · ${notes.join(", ")}` : "Done";
+
+      setMessages((m) =>
+        m.map((msg, i) =>
+          i === index && msg.kind === "proposal" ? { ...msg, settled } : msg,
+        ),
+      );
+      // The assistant needs to know it landed, or the next turn will offer to
+      // do it again. Recorded as a turn, not shown as a message.
+      setTurns((t) => [
+        ...t,
+        { role: "user", content: `[The user confirmed that change. It is now applied.]` },
+      ]);
+      setPhase("idle");
       router.refresh();
     });
   }
 
-  const review = stage.kind === "review" ? stage.response : null;
-  const busy = pending || stage.kind === "transcribing" || stage.kind === "planning";
-  const active = stepIndex(stage);
+  function discard(index: number) {
+    setMessages((m) =>
+      m.map((msg, i) =>
+        i === index && msg.kind === "proposal" ? { ...msg, settled: "Discarded" } : msg,
+      ),
+    );
+    setTurns((t) => [
+      ...t,
+      { role: "user", content: "[The user discarded that proposal. Nothing was applied.]" },
+    ]);
+  }
 
   return (
     <aside className="assistant" aria-label="Foreman assistant">
       <div className="assistant-head">
         <span className="assistant-badge">AI</span>
-        <p className="assistant-title">Tell Foreman what changed</p>
+        <p className="assistant-title">Foreman</p>
       </div>
 
-      <button
-        type="button"
-        className={`assistant-mic${mic.recording ? " assistant-mic--live" : ""}`}
-        onClick={toggleMic}
-        disabled={busy}
-        aria-pressed={mic.recording}
-      >
-        <span className="assistant-mic-glyph" aria-hidden>
-          {mic.recording ? "■" : "🎙"}
-        </span>
-        <span className="assistant-mic-text">
-          {mic.recording ? "Stop" : "Start talking"}
-        </span>
-      </button>
+      <div className="assistant-thread" aria-live="polite">
+        {messages.length === 0 ? (
+          <div className="assistant-intro">
+            <p>Ask me anything about the jobs, or tell me what changed.</p>
+            <ul>
+              <li>“Is Alex free on Tuesday?”</li>
+              <li>“What&rsquo;s late on Hillcrest?”</li>
+              <li>“Push framing back two weeks and let Tom know”</li>
+              <li>“Start a job called Chico Flats, plumbing on the 18th”</li>
+            </ul>
+          </div>
+        ) : null}
+
+        {messages.map((message, i) => {
+          if (message.kind === "you") {
+            return (
+              <p key={i} className="msg msg--you">
+                {message.text}
+              </p>
+            );
+          }
+          if (message.kind === "problem") {
+            return (
+              <p key={i} className="msg msg--problem" role="alert">
+                {message.text}
+              </p>
+            );
+          }
+          if (message.kind === "foreman") {
+            return (
+              <p key={i} className="msg msg--foreman">
+                {message.text}
+              </p>
+            );
+          }
+          return (
+            <div key={i}>
+              <p className="msg msg--foreman">{message.text}</p>
+              <PlanReview
+                preview={message.preview}
+                settled={message.settled}
+                busy={busy}
+                onConfirm={() => confirm(i)}
+                onDiscard={() => discard(i)}
+              />
+            </div>
+          );
+        })}
+
+        {mic.recording && mic.caption ? (
+          <p className="msg msg--you msg--draft">{mic.caption}</p>
+        ) : null}
+
+        {phase !== "idle" ? (
+          <p className="assistant-working">
+            {phase === "transcribing"
+              ? "Writing that down…"
+              : phase === "applying"
+                ? "Applying…"
+                : "Thinking…"}
+          </p>
+        ) : null}
+
+        <div ref={threadEnd} />
+      </div>
 
       {mic.recording ? (
         <>
@@ -187,62 +291,45 @@ export function VoicePanel() {
               style={{ transform: `scaleX(${Math.max(0.03, mic.level).toFixed(3)})` }}
             />
           </div>
-          <p className="assistant-hint">
-            Stops on its own when you stop talking, then plans it.
-          </p>
+          <p className="assistant-hint">Stops on its own when you stop talking.</p>
         </>
       ) : null}
 
-      {active >= 0 ? (
-        <ol className="assistant-steps" aria-label="Progress">
-          {STEPS.map((label, i) => (
-            <li
-              key={label}
-              className={
-                i < active
-                  ? "assistant-step assistant-step--done"
-                  : i === active
-                    ? "assistant-step assistant-step--now"
-                    : "assistant-step"
-              }
-            >
-              {label}
-            </li>
-          ))}
-        </ol>
-      ) : null}
-
-      {/* Live words while speaking, the final transcript afterwards. */}
-      {mic.recording && mic.caption ? (
-        <p className="assistant-caption" aria-live="polite">
-          {mic.caption}
-        </p>
-      ) : null}
-      {mic.recording && !mic.caption && mic.captionsSupported ? (
-        <p className="assistant-caption assistant-caption--waiting">Listening…</p>
-      ) : null}
-      {!mic.recording && heard ? (
-        <div className="assistant-heard">
-          <p className="assistant-label">Heard</p>
-          <p className="assistant-heard-text">“{heard}”</p>
-        </div>
-      ) : null}
+      <button
+        type="button"
+        className={`assistant-mic${mic.recording ? " assistant-mic--live" : ""}`}
+        onClick={toggleMic}
+        disabled={busy}
+        aria-pressed={mic.recording}
+      >
+        <span className="assistant-mic-glyph" aria-hidden>
+          {mic.recording ? "■" : "🎙"}
+        </span>
+        <span className="assistant-mic-text">{mic.recording ? "Stop" : "Talk"}</span>
+      </button>
 
       <form
         className="assistant-form"
         onSubmit={(e) => {
           e.preventDefault();
-          setHeard("");
-          plan(text);
+          send(text);
         }}
       >
         <textarea
           className="assistant-input"
           value={text}
           onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            // Enter sends, Shift+Enter breaks the line — chat convention, and
+            // the alternative is reaching for a button after every sentence.
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              send(text);
+            }
+          }}
           rows={2}
-          placeholder={'Or type: "Push framing back two weeks and let Tom know"'}
-          aria-label="Type a scheduling command"
+          placeholder="Ask or tell…"
+          aria-label="Message Foreman"
           disabled={busy || mic.recording}
         />
         <button
@@ -250,45 +337,29 @@ export function VoicePanel() {
           className="btn assistant-go"
           disabled={busy || mic.recording || !text.trim()}
         >
-          Plan
+          Send
         </button>
       </form>
-
-      <div className="assistant-body" aria-live="polite">
-        {stage.kind === "error" ? (
-          <p className="assistant-error" role="alert">
-            {stage.message}
-          </p>
-        ) : null}
-
-        {stage.kind === "done" ? (
-          <p className="assistant-done">Done — {stage.message}</p>
-        ) : null}
-
-        {review ? <PlanReview review={review} onConfirm={confirm} onCancel={() => setStage({ kind: "idle" })} busy={pending} /> : null}
-      </div>
     </aside>
   );
 }
 
 /** The diff, read before anything is written. */
 function PlanReview({
-  review,
-  onConfirm,
-  onCancel,
+  preview: p,
+  settled,
   busy,
+  onConfirm,
+  onDiscard,
 }: {
-  review: Extract<PlanResponse, { ok: true }>;
-  onConfirm: () => void;
-  onCancel: () => void;
+  preview: PlanPreview;
+  settled: string | null;
   busy: boolean;
+  onConfirm: () => void;
+  onDiscard: () => void;
 }) {
-  const p = review.preview;
-
   return (
-    <div className="plan">
-      <p className="plan-summary">{p.summary}</p>
-
+    <div className={`plan${settled ? " plan--settled" : ""}`}>
       {p.confidence === "low" ? (
         <p className="plan-lowconf">
           I may have misheard something — check the details before confirming.
@@ -364,7 +435,7 @@ function PlanReview({
         </p>
       ))}
 
-      {/* Called out separately from the planner's own emails: these are ones
+      {/* Called out separately from the assistant's own emails: these are ones
           the app adds on your behalf, and they go the moment you confirm. */}
       {p.notifications.length > 0 ? (
         <div className="plan-block plan-block--notify">
@@ -391,16 +462,24 @@ function PlanReview({
         </div>
       ))}
 
-      <div className="plan-actions">
-        <button type="button" className="btn btn--ghost" onClick={onCancel} disabled={busy}>
-          Cancel
-        </button>
-        {p.empty || p.clarification ? null : (
-          <button type="button" className="btn" onClick={onConfirm} disabled={busy}>
-            {busy ? "Applying…" : "Confirm"}
+      {settled ? (
+        <p className="plan-settled">{settled}</p>
+      ) : p.empty || p.clarification ? (
+        <div className="plan-actions">
+          <button type="button" className="btn btn--ghost" onClick={onDiscard} disabled={busy}>
+            Dismiss
           </button>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="plan-actions">
+          <button type="button" className="btn btn--ghost" onClick={onDiscard} disabled={busy}>
+            Discard
+          </button>
+          <button type="button" className="btn" onClick={onConfirm} disabled={busy}>
+            Confirm
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -10,7 +10,9 @@ import { projectColor } from "@/lib/project-color";
 import { humanRange } from "@/lib/format-date";
 import { dispatchQueued } from "@/lib/outbox/dispatch";
 import { buildPlannerContext } from "./context";
-import { planFromTranscript, PlannerError } from "./planner";
+import { PlannerError } from "./validate";
+import { converse, AgentError } from "./agent";
+import type { Turn } from "./agent";
 import { planSchema } from "./schema";
 import type { Plan } from "./schema";
 import {
@@ -28,8 +30,8 @@ import type { Json } from "@/lib/database.types";
 /**
  * Voice pipeline, server side (SPEC §5):
  *
- *   planCommand(text)  → Plan (from the model) + PlanPreview (from the engine)
- *   applyPlan(plan)    → one transaction via apply_plan_writes()
+ *   askForeman(text, history) → a reply, and optionally a Plan + PlanPreview
+ *   applyPlan(plan)           → one transaction via apply_plan_writes()
  *
  * The preview is recomputed from the Plan at apply time. The client only ever
  * echoes the Plan back; the numbers the user confirmed are re-derived
@@ -80,9 +82,24 @@ export type PlanPreview = {
   empty: boolean;
 };
 
-export type PlanResponse =
-  | { ok: true; plan: Plan; preview: PlanPreview; transcript: string }
-  | { ok: false; error: string };
+/**
+ * One conversational turn.
+ *
+ * `reply` is always there — the assistant answers even when it is proposing.
+ * `plan`/`preview` are set only when it wants to change something, and the
+ * user still has to confirm. `turns` is the conversation to hand back next
+ * time; it round-trips through the client, which is why nothing in it is
+ * trusted on the way back in.
+ */
+export type AskResponse =
+  | {
+      ok: true;
+      reply: string;
+      turns: Turn[];
+      plan: Plan | null;
+      preview: PlanPreview | null;
+    }
+  | { ok: false; error: string; turns: Turn[] };
 
 // ── Engine assembly ──────────────────────────────────────────────────────────
 
@@ -456,35 +473,90 @@ function buildPreview(
   return { preview, asm, notify };
 }
 
-// ── planCommand ──────────────────────────────────────────────────────────────
+// ── askForeman ───────────────────────────────────────────────────────────────
 
 const commandSchema = z.object({
   text: z.string().trim().min(1, "Say or type something first").max(2000),
 });
 
-export async function planCommand(input: { text: string }): Promise<PlanResponse> {
+/**
+ * Conversation history as it comes back from the client.
+ *
+ * Reshaped rather than trusted. It cannot do harm — every tool is org-scoped
+ * server-side, and applyPlan re-derives everything from a fresh context — but
+ * a malformed turn would break the API call, and an unbounded one would cost
+ * money, so both are capped here.
+ */
+const turnSchema = z.object({
+  role: z.enum(["user", "assistant", "tool"]),
+  content: z.string().max(20_000),
+  toolCalls: z
+    .array(
+      z.object({
+        id: z.string().max(200),
+        name: z.string().max(100),
+        args: z.string().max(20_000),
+      }),
+    )
+    .max(8)
+    .optional(),
+  toolCallId: z.string().max(200).optional(),
+});
+
+export async function askForeman(input: {
+  text: string;
+  history?: unknown;
+}): Promise<AskResponse> {
   const m = await requireMembership();
   const parsed = commandSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Empty command." };
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Empty message.",
+      turns: [],
+    };
   }
 
+  const history = z.array(turnSchema).max(60).safeParse(input.history ?? []);
+  const priorTurns: Turn[] = history.success ? history.data : [];
+
   try {
-    // No guard on an empty project list any more. It used to refuse outright,
-    // which meant a brand-new account's first sentence — the one most likely
-    // to be "start a job called X" — hit a dead end pointing at a form.
+    // No guard on an empty project list. It used to refuse outright, which
+    // meant a brand-new account's first sentence — the one most likely to be
+    // "start a job called X" — hit a dead end pointing at a form.
     const ctx = await buildPlannerContext(m.orgId, m.timezone);
-    const plan = await planFromTranscript(parsed.data.text, ctx);
-    const { preview } = buildPreview(plan, ctx);
-    return { ok: true, plan, preview, transcript: parsed.data.text };
+    const result = await converse(
+      parsed.data.text,
+      priorTurns,
+      ctx,
+      m.orgId,
+      m.orgName,
+    );
+
+    // The preview is computed here, from the plan, rather than by the model.
+    // Every date the user reads before confirming comes out of the schedule
+    // engine — the assistant chooses *what* to change, never what the result
+    // looks like.
+    const preview = result.plan ? buildPreview(result.plan, ctx).preview : null;
+
+    return {
+      ok: true,
+      reply: result.reply,
+      turns: result.turns,
+      plan: result.plan,
+      preview,
+    };
   } catch (err) {
-    if (err instanceof PlannerError) return { ok: false, error: err.message };
+    if (err instanceof PlannerError || err instanceof AgentError) {
+      return { ok: false, error: err.message, turns: priorTurns };
+    }
     return {
       ok: false,
       error:
         err instanceof Error
-          ? `Could not build a plan: ${err.message}`
-          : "Could not build a plan. Try again.",
+          ? `Could not answer that: ${err.message}`
+          : "Could not answer that. Try again.",
+      turns: priorTurns,
     };
   }
 }

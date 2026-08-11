@@ -1020,53 +1020,80 @@
   text-transform: uppercase;
 }
 
-.assistant-steps {
+/* The thread takes whatever height is left, so the mic and the input stay
+   put at the bottom rather than being pushed off as the conversation grows. */
+.assistant-thread {
+  flex: 1;
+  min-height: 120px;
+  overflow-y: auto;
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.assistant-step {
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: #f0efe9;
+.assistant-intro {
+  font-size: 13px;
+  line-height: 1.55;
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
 }
 
-.assistant-step--done {
-  background: #e4ece6;
-  color: #2c6149;
+.assistant-intro p {
+  margin: 0 0 8px;
 }
 
-.assistant-step--now {
+.assistant-intro ul {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.assistant-intro li {
+  margin-bottom: 4px;
+}
+
+.msg {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Yours sits right and dark; the assistant's sits left and pale. The asymmetry
+   is doing the work here — at a glance you can see who said what without
+   reading a word of it. */
+.msg--you {
+  align-self: flex-end;
+  max-width: 90%;
   background: var(--forest);
   color: #fff;
 }
 
-.assistant-caption {
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: #f6f5f0;
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--ink);
-}
-
-.assistant-caption--waiting {
-  color: var(--muted);
+.msg--draft {
+  opacity: 0.6;
   font-style: italic;
 }
 
-.assistant-heard-text {
-  margin: 2px 0 0;
+.msg--foreman {
+  align-self: flex-start;
+  max-width: 95%;
+  background: #f2f1ec;
+  color: var(--ink);
+}
+
+.msg--problem {
+  align-self: stretch;
+  border: 1px solid #f0c5b9;
+  background: #fceeea;
+  color: #6d2718;
   font-size: 13px;
-  line-height: 1.5;
+}
+
+.assistant-working {
+  margin: 0;
+  font-size: 12px;
+  font-style: italic;
   color: var(--muted);
 }
 
@@ -1117,10 +1144,24 @@
 }
 
 .plan {
+  margin-top: 8px;
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--canvas);
+}
+
+/* A settled proposal stays in the thread as a record of what was decided,
+   but stops competing for attention with whatever is happening now. */
+.plan--settled {
+  opacity: 0.65;
+}
+
+.plan-settled {
+  margin: 12px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #2c6149;
 }
 
 .plan-swatch {
