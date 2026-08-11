@@ -295,7 +295,15 @@ function PlanReview({
         </p>
       ) : null}
 
+      {/* Blocks: it needs an answer before anything can happen. */}
       {p.clarification ? <p className="plan-clarify">{p.clarification}</p> : null}
+
+      {/* Does not block: the rest still applies, this is what got left out. */}
+      {p.notes ? (
+        <p className="plan-note">
+          <strong>Note:</strong> {p.notes}
+        </p>
+      ) : null}
 
       {p.newProjects.length > 0 ? (
         <div className="plan-block">
@@ -363,7 +371,7 @@ function PlanReview({
           <p className="assistant-label">Sends on confirm</p>
           {p.notifications.map((n, i) => (
             <p key={`n${i}`} className="plan-line">
-              <strong>{n.contactName}</strong> — {n.taskName}
+              <strong>{n.contactName}</strong> — {n.taskName}, {n.when}
               {n.invite ? " · email + calendar invite" : " · email"}
             </p>
           ))}

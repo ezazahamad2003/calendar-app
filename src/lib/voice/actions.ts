@@ -7,6 +7,7 @@ import { requireMembership } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getEnv } from "@/lib/env";
 import { projectColor } from "@/lib/project-color";
+import { humanRange } from "@/lib/format-date";
 import { dispatchQueued } from "@/lib/outbox/dispatch";
 import { buildPlannerContext } from "./context";
 import { planFromTranscript, PlannerError } from "./planner";
@@ -51,7 +52,10 @@ export type PreviewMove = {
 
 export type PlanPreview = {
   summary: string;
+  /** Blocks the apply. */
   clarification: string | null;
+  /** Advisory only — the plan still applies. */
+  notes: string | null;
   confidence: "high" | "low";
   newProjects: { name: string; clientName: string | null; color: string }[];
   moves: PreviewMove[];
@@ -66,7 +70,12 @@ export type PlanPreview = {
    * asked for) so the diff never hides an outbound message behind "assigned
    * Alex to framing".
    */
-  notifications: { contactName: string; taskName: string; invite: boolean }[];
+  notifications: {
+    contactName: string;
+    taskName: string;
+    when: string;
+    invite: boolean;
+  }[];
   /** Nothing to do — e.g. pure clarification. */
   empty: boolean;
 };
@@ -216,9 +225,11 @@ export type NotifyIntent = {
   /** Real task id, or "$tN". */
   taskRef: string;
   taskName: string;
-  startDate: string | null;
+  /** Never null: an undated task produces no notification at all. */
+  startDate: string;
   endDate: string | null;
 };
+
 
 function collectNotifications(
   plan: Plan,
@@ -264,6 +275,13 @@ function collectNotifications(
     const fresh = planned.get(pair.contactRef);
     const resolved = changeByTask.get(pair.taskRef);
     const current = taskById.get(pair.taskRef);
+    const startDate = resolved?.toStartDate ?? current?.startDate ?? null;
+
+    // A task with no dates has nothing to tell anyone. Assigning someone to
+    // undated work is a normal thing to do — it just isn't news yet, and
+    // sending it anyway produced the memorable "You're scheduled for
+    // Plumberry: not yet scheduled." They get told when it lands on a day.
+    if (!startDate) continue;
 
     out.push({
       contactRef: pair.contactRef,
@@ -274,7 +292,7 @@ function collectNotifications(
       email: existing ? (existing.hasEmail ? "on file" : null) : (fresh?.email ?? null),
       taskRef: pair.taskRef,
       taskName: pair.taskName,
-      startDate: resolved?.toStartDate ?? current?.startDate ?? null,
+      startDate,
       endDate: resolved?.toEndDate ?? current?.endDate ?? null,
     });
   }
@@ -405,6 +423,7 @@ function buildPreview(
   const preview: PlanPreview = {
     summary: plan.summary,
     clarification: plan.clarification ?? null,
+    notes: plan.notes ?? null,
     confidence: plan.confidence,
     newProjects,
     moves,
@@ -421,7 +440,8 @@ function buildPreview(
       .map((n) => ({
         contactName: n.contactName,
         taskName: n.taskName,
-        invite: inviteAttendees && n.startDate !== null,
+        when: humanRange(n.startDate, n.endDate),
+        invite: inviteAttendees,
       })),
     empty:
       newProjects.length === 0 &&
@@ -787,11 +807,7 @@ export async function applyPlan(input: {
     for (const n of notify) {
       if (n.email === null) continue; // no address on file; nothing to send
 
-      const when = n.startDate
-        ? n.endDate && n.endDate !== n.startDate
-          ? `${n.startDate} to ${n.endDate}`
-          : n.startDate
-        : "not yet scheduled";
+      const when = humanRange(n.startDate, n.endDate);
 
       const emailKey = crypto.randomUUID();
       notifyKeys.push(emailKey);

@@ -92,8 +92,22 @@ export const planSchema = z.object({
   /** One sentence, read back to the user before they confirm. */
   summary: z.string().trim().min(1).max(300),
   operations: z.array(operationSchema).max(20),
-  /** Set when the request is ambiguous — and then operations must be empty. */
+  /**
+   * A question that must be answered before anything can safely happen —
+   * which Tom, which project, what address. Blocks: operations must be empty.
+   */
   clarification: z.string().trim().max(400).nullish(),
+  /**
+   * What was dropped while doing the rest — a request for times of day, say,
+   * when the app schedules by whole days. Does NOT block; the plan still
+   * applies, and this is shown alongside it.
+   *
+   * The distinction is the whole point: "which Alex did you mean" cannot be
+   * guessed, but "I ignored the 8pm" is worth saying and not worth stopping
+   * for. Collapsing the two is why asking for a project with times attached
+   * used to create nothing at all.
+   */
+  notes: z.string().trim().max(400).nullish(),
   confidence: z.enum(["high", "low"]),
 });
 

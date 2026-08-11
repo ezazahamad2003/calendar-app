@@ -1157,6 +1157,24 @@
   color: #5d4a22;
 }
 
+/* Quieter than a clarification on purpose: a note is something that got left
+   out of work that is otherwise going ahead, and it should not read like the
+   amber "I need an answer from you" box sitting next to it. */
+.plan-note {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #f4f3ee;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.plan-note strong {
+  color: var(--ink);
+}
+
 .plan-block {
   margin-bottom: 10px;
 }
