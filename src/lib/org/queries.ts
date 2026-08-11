@@ -209,7 +209,16 @@ export async function listContacts(orgId: string): Promise<ContactRow[]> {
 
 export type CalendarTask = Pick<
   TaskRow,
-  "id" | "project_id" | "name" | "trade" | "status" | "start_date" | "end_date" | "is_milestone"
+  | "id"
+  | "project_id"
+  | "name"
+  | "trade"
+  | "status"
+  | "start_date"
+  | "end_date"
+  | "start_time"
+  | "end_time"
+  | "is_milestone"
 > & {
   project_name: string;
   /** Explicit color if one was chosen; null means derive from the name. */
@@ -226,12 +235,16 @@ export async function tasksOverlapping(
   const { data, error } = await supabase
     .from("tasks")
     .select(
-      "id, project_id, name, trade, status, start_date, end_date, is_milestone, projects(name, color)",
+      "id, project_id, name, trade, status, start_date, end_date, start_time, end_time, is_milestone, projects(name, color)",
     )
     .eq("org_id", orgId)
     .not("start_date", "is", null)
     .lte("start_date", toIso)
-    .gte("end_date", fromIso);
+    .gte("end_date", fromIso)
+    // Timed work first and in clock order, so the day column is built in the
+    // order it will be read even before the overlap pass runs.
+    .order("start_time", { ascending: true, nullsFirst: false })
+    .order("name", { ascending: true });
 
   if (error) throw new Error(`Could not load the calendar: ${error.message}`);
 

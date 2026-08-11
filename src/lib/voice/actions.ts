@@ -7,7 +7,7 @@ import { requireMembership } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { humanRange } from "@/lib/format-date";
 import { dispatchQueued } from "@/lib/outbox/dispatch";
-import { syncTasksToCalendar } from "@/lib/providers/calendar-sync";
+import { deleteCalendarEvents, syncTasksToCalendar } from "@/lib/providers/calendar-sync";
 import { buildPlannerContext } from "./context";
 import { PlannerError, validatePlanIds } from "./validate";
 import { converse, AgentError } from "./agent";
@@ -153,9 +153,13 @@ export type ApplyResponse =
       notifyMocked: boolean;
       /** Calendar events created or updated on the user's own calendar. */
       calendarWritten: number;
+      /** Events taken off it, because the task or job they described is gone. */
+      calendarRemoved: number;
       calendarFailed: number;
       /** True when no account is connected, so nothing was pushed. */
       calendarSkipped: boolean;
+      /** True when one *is* connected but its grant has died. */
+      calendarNeedsReauth: boolean;
     }
   | { ok: false; error: string };
 
@@ -206,7 +210,8 @@ export async function applyPlan(input: {
       if (
         (op.type === "create_task" ||
           op.type === "update_project" ||
-          op.type === "shift_project") &&
+          op.type === "shift_project" ||
+          op.type === "delete_project") &&
         !op.projectId.startsWith("$") &&
         !contextProjectIds.has(op.projectId)
       ) {
@@ -233,6 +238,7 @@ export async function applyPlan(input: {
       tasks: asm.engineTasks,
       deps: asm.engineDeps,
       changed: asm.directChanges,
+      durations: asm.durationOverrides,
       calendar: ctx.calendar,
     });
     const changeByTask = new Map(changes.map((c) => [c.taskId, c]));
@@ -318,6 +324,8 @@ export async function applyPlan(input: {
           trade: op.trade ?? "",
           start_date: startDate,
           end_date: endDate,
+          start_time: op.startTime ?? "",
+          end_time: op.endTime ?? "",
           duration_days: duration,
           is_milestone: op.isMilestone,
         },
@@ -421,6 +429,16 @@ export async function applyPlan(input: {
           const data: Record<string, unknown> = { id: op.taskId };
           if (op.name != null) data.name = op.name;
           if (op.trade != null) data.trade = op.trade;
+          // "" is the clear signal the RPC understands, and it has to be sent
+          // for both columns at once — a start with a stale end left behind
+          // violates the check constraint and rolls back the whole plan.
+          if (op.clearTimes) {
+            data.start_time = "";
+            data.end_time = "";
+          } else {
+            if (op.startTime != null) data.start_time = op.startTime;
+            if (op.endTime != null) data.end_time = op.endTime;
+          }
           if (Object.keys(data).length === 1) break;
           ops.push({
             kind: "update_task",
@@ -576,6 +594,101 @@ export async function applyPlan(input: {
       // same day's work.
     }
 
+    // 8. Removals, last. Nothing above may touch a row a later operation
+    //    deletes — validatePlanIds refuses a plan that edits and deletes the
+    //    same thing — so ordering them at the end keeps temp-id resolution and
+    //    the cascade working against a schedule that still exists.
+    //
+    //    The `before` snapshot matters more here than anywhere else: change_log
+    //    is the only place a deleted row survives, and "project deleted" with
+    //    no name in it settles no argument.
+    plan.operations.forEach((op) => {
+      switch (op.type) {
+        case "delete_project": {
+          const project = ctx.projects.find((p) => p.id === op.projectId);
+          ops.push({
+            kind: "delete_project",
+            data: { id: op.projectId },
+            log: {
+              entity_type: "project",
+              action: "delete",
+              before: {
+                name: project?.name,
+                client_name: project?.clientName,
+                job_number: project?.jobNumber,
+                tasks: ctx.tasks
+                  .filter((t) => t.projectId === op.projectId)
+                  .map((t) => ({ name: t.name, start_date: t.startDate })),
+              },
+            },
+          });
+          break;
+        }
+        case "delete_task": {
+          const task = taskById.get(op.taskId);
+          ops.push({
+            kind: "delete_task",
+            data: { id: op.taskId },
+            log: {
+              entity_type: "task",
+              action: "delete",
+              before: {
+                name: task?.name,
+                start_date: task?.startDate,
+                end_date: task?.endDate,
+                duration_days: task?.durationDays,
+                status: task?.status,
+              },
+            },
+          });
+          break;
+        }
+        case "delete_contact": {
+          const contact = ctx.contacts.find((c) => c.id === op.contactId);
+          ops.push({
+            kind: "delete_contact",
+            data: { id: op.contactId },
+            log: {
+              entity_type: "contact",
+              action: "delete",
+              before: { name: contact?.name, company: contact?.company },
+            },
+          });
+          break;
+        }
+        case "unassign_task":
+          ops.push({
+            kind: "delete_assignment",
+            data: { task_id: op.taskId, contact_id: op.contactId },
+            log: {
+              entity_type: "assignment",
+              action: "unassign",
+              before: {
+                task: asm.nameOf(op.taskId),
+                contact: ctx.contacts.find((c) => c.id === op.contactId)?.name,
+              },
+            },
+          });
+          break;
+        case "remove_dependency":
+          ops.push({
+            kind: "delete_dep",
+            data: { predecessor_id: op.predecessorId, successor_id: op.successorId },
+            log: {
+              entity_type: "task_dep",
+              action: "delete",
+              before: {
+                predecessor: asm.nameOf(op.predecessorId),
+                successor: asm.nameOf(op.successorId),
+              },
+            },
+          });
+          break;
+        default:
+          break;
+      }
+    });
+
     if (ops.length === 0) {
       return { ok: false, error: "Nothing to apply — the plan had no effect." };
     }
@@ -630,6 +743,26 @@ export async function applyPlan(input: {
 
     const synced = await syncTasksToCalendar(m.orgId, m.userId, touched);
 
+    // And take the deleted ones off it. The ids came back from the RPC, which
+    // read them off the rows on its way past — after the commit they exist
+    // nowhere else, and an event left behind is a date the contractor's own
+    // calendar still claims is happening.
+    const removedEvents = (
+      typeof data === "object" && data !== null && "removed_events" in data
+        ? ((data as { removed_events: unknown }).removed_events ?? [])
+        : []
+    ) as { eventId?: string; provider?: string | null }[];
+
+    const cleaned = await deleteCalendarEvents(
+      m.orgId,
+      m.userId,
+      removedEvents
+        .filter((e): e is { eventId: string; provider: string | null } =>
+          typeof e?.eventId === "string" && e.eventId.length > 0,
+        )
+        .map((e) => ({ eventId: e.eventId, provider: e.provider ?? null })),
+    );
+
     revalidatePath("/", "layout");
     const applied =
       typeof data === "object" && data !== null && "applied" in data
@@ -644,8 +777,10 @@ export async function applyPlan(input: {
       notifyFailed: dispatched.failed,
       notifyMocked: dispatched.mocked,
       calendarWritten: synced.created + synced.updated,
-      calendarFailed: synced.failed,
+      calendarRemoved: cleaned.removed,
+      calendarFailed: synced.failed + cleaned.failed,
       calendarSkipped: synced.skipped,
+      calendarNeedsReauth: synced.needsReauth,
     };
   } catch (err) {
     if (err instanceof PlannerError) return { ok: false, error: err.message };

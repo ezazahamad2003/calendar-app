@@ -20,10 +20,18 @@ import { createServerClient } from "@supabase/ssr";
  *      that wasn't before; if it does, that is a bug in the DAL.
  */
 
-/** Reachable signed-out. Everything else requires a session. */
-const PUBLIC_PATHS = ["/login", "/signup", "/auth/callback", "/auth/auth-code-error"];
+/**
+ * Reachable signed-out. Everything else requires a session.
+ *
+ * "/" is on the list because it is the marketing page — the one screen whose
+ * whole job is to be read by someone without an account.
+ */
+const PUBLIC_PATHS = ["/", "/login", "/signup", "/auth/callback", "/auth/auth-code-error"];
 
 function isPublic(pathname: string): boolean {
+  // The `${p}/` prefix test is what makes "/auth/callback/anything" public
+  // too. For "/" that would be "//", which no real pathname starts with, so
+  // the root entry stays an exact match rather than opening everything.
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
@@ -79,9 +87,13 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(to);
   }
 
-  if (user && (pathname === "/login" || pathname === "/signup")) {
+  // Signed in, so the pitch and the forms are all behind them: send them to
+  // the work. This is what makes the app the default destination once an
+  // account exists — typing the bare domain gets the schedule, not the
+  // marketing page.
+  if (user && (pathname === "/" || pathname === "/login" || pathname === "/signup")) {
     const to = request.nextUrl.clone();
-    to.pathname = "/";
+    to.pathname = "/calendar";
     to.search = "";
     return NextResponse.redirect(to);
   }

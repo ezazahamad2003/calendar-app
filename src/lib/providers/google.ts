@@ -80,8 +80,22 @@ export class GoogleClient implements MailCalendarClient {
     if (opts.subject !== undefined) out.summary = opts.subject;
     if (opts.body !== undefined) out.description = opts.body;
     if (opts.startDate && opts.endDate) {
-      out.start = { date: opts.startDate, timeZone: opts.timeZone };
-      out.end = { date: exclusiveEnd(opts.endDate), timeZone: opts.timeZone };
+      if (opts.startTime && opts.endTime) {
+        // A timed event uses dateTime and an INCLUSIVE end, unlike the all-day
+        // form below. Same day both ends: the window is one day's shift, and
+        // the task's date range says how many days it repeats for.
+        out.start = {
+          dateTime: `${opts.startDate}T${opts.startTime}:00`,
+          timeZone: opts.timeZone,
+        };
+        out.end = {
+          dateTime: `${opts.startDate}T${opts.endTime}:00`,
+          timeZone: opts.timeZone,
+        };
+      } else {
+        out.start = { date: opts.startDate, timeZone: opts.timeZone };
+        out.end = { date: exclusiveEnd(opts.endDate), timeZone: opts.timeZone };
+      }
     }
     if (opts.attendees) {
       // Subs as attendees, so accept/decline flows back (SPEC §6).
@@ -111,6 +125,14 @@ export class GoogleClient implements MailCalendarClient {
       "PATCH",
       `${CALENDAR}/calendars/${calendarId}/events/${encodeURIComponent(eventId)}?sendUpdates=all`,
       GoogleClient.eventBody(opts),
+    );
+  }
+
+  async deleteEvent(eventId: string, calendarId?: string): Promise<void> {
+    const target = encodeURIComponent(calendarId ?? "primary");
+    await this.session.call(
+      "DELETE",
+      `${CALENDAR}/calendars/${target}/events/${encodeURIComponent(eventId)}?sendUpdates=all`,
     );
   }
 

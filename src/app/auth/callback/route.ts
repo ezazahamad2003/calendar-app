@@ -42,14 +42,17 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Land on "/", which routes to onboarding or the dashboard depending on
-  // whether this user has an org yet. Keeping that decision in one place means
-  // the callback does not need to know about it.
+  // Land on "/calendar", which routes to onboarding or the schedule depending
+  // on whether this user has an org yet. Keeping that decision in one place
+  // means the callback does not need to know about it. Not "/" — that is the
+  // marketing page, and a confirmation link that lands on a sales pitch reads
+  // like the confirmation did not work.
   //
   // Only a relative path is honoured — `next` arrives from a URL the user
   // clicked in an email, so treating it as trusted would be an open redirect.
   const next = searchParams.get("next");
-  const target = next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
+  const target =
+    next && next.startsWith("/") && !next.startsWith("//") ? next : "/calendar";
 
   return NextResponse.redirect(`${origin}${target}`);
 }

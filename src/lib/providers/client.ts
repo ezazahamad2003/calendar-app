@@ -22,11 +22,23 @@ export type SendMailOptions = {
 
 export type CreateEventOptions = {
   subject: string;
-  /** Civil dates, org-local. Events are all-day: tasks are date ranges. */
+  /** Civil dates, org-local. */
   startDate: string;
   /** Inclusive last day; each client converts to its API's exclusive end. */
   endDate: string;
   timeZone: string;
+  /**
+   * `HH:MM` on-site window. Both absent = an all-day event, which is what a
+   * task with no times has always produced and still the common case.
+   *
+   * A multi-day task with a window repeats it on each day, so what goes on the
+   * provider's calendar is the FIRST day's block: neither Graph nor Google has
+   * a "same hours, several days" event short of a recurrence rule, and one
+   * timed block plus the right dates is closer to the truth than a single
+   * event running through two nights.
+   */
+  startTime?: string | null;
+  endTime?: string | null;
   body?: string;
   attendees?: { address: string; name?: string }[];
   /** Target calendar; omitted = the account's default calendar. */
@@ -40,6 +52,12 @@ export interface MailCalendarClient {
   sendMail(opts: SendMailOptions): Promise<{ messageId: string | null }>;
   createEvent(opts: CreateEventOptions): Promise<{ eventId: string }>;
   updateEvent(eventId: string, opts: Partial<CreateEventOptions>): Promise<void>;
+  /**
+   * Remove an event. Must treat "already gone" as success — the caller is
+   * cleaning up after a deleted task and has no way to know whether the user
+   * removed the event by hand first.
+   */
+  deleteEvent(eventId: string, calendarId?: string): Promise<void>;
   listCalendars(): Promise<Calendar[]>;
   createCalendar(name: string): Promise<Calendar>;
 }

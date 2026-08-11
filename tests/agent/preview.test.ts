@@ -42,7 +42,11 @@ describe("invariant 6 — the preview is the whole plan", () => {
   it("J1: an undated new task is still a change worth confirming", () => {
     const p = preview([{ type: "create_task", projectId: "p1", name: "Plumbing" }]);
     expect(p.empty).toBe(false);
-    expect(p.newTasks).toEqual([{ name: "Plumbing", projectName: "Chico Real Estate" }]);
+    expect(p.newTasks).toHaveLength(1);
+    expect(p.newTasks[0]).toMatchObject({
+      name: "Plumbing",
+      projectName: "Chico Real Estate",
+    });
   });
 
   it("J2: a resize is a change worth confirming, and says how long it was", () => {
@@ -233,6 +237,136 @@ describe("dependencies, lag and milestones", () => {
       to: "4 days",
     });
     expect(p.moves.find((m) => m.name === "Drywall")?.toStart).toBe(FRI);
+  });
+
+  it("I10: the resized task keeps its start and moves its end", () => {
+    const p = preview([{ type: "resize_task", taskId: "t1", durationDays: 4 }]);
+    const framing = p.moves.find((m) => m.name === "Framing");
+    // Where it used to end, beside where it will. Same start on both sides —
+    // a longer task is not a later one.
+    expect(framing).toMatchObject({
+      fromStart: MON,
+      toStart: MON,
+      fromEnd: TUE,
+      toEnd: THU,
+    });
+  });
+
+});
+
+describe("a delete says what goes with it", () => {
+  it("deleting a job counts its tasks, links and crew bookings", () => {
+    const ctx = makeContext({
+      deps: [{ predecessorId: "t1", successorId: "t2", depType: "FS", lagDays: 0 }],
+    });
+    const p = preview([{ type: "delete_project", projectId: "p1" }], ctx);
+    expect(p.empty).toBe(false);
+    expect(p.removals).toHaveLength(1);
+    expect(p.removals[0]).toMatchObject({ kind: "job", name: "Chico Real Estate" });
+    // Four tasks in the fixture, one link between two of them, Alex on the
+    // inspection. All three numbers have to be in front of the user.
+    expect(p.removals[0].alsoRemoved).toEqual([
+      "4 tasks",
+      "1 dependency",
+      "1 crew booking",
+    ]);
+  });
+
+  it("counts a finished job's tasks without claiming to know its links", () => {
+    // A project that is not active carries no tasks in the context, so the
+    // count comes off the project itself and the lines that cannot be
+    // verified are left out rather than reported as zero.
+    const ctx = makeContext({
+      projects: [
+        {
+          id: "p2",
+          name: "Old Warehouse",
+          jobNumber: "23-11",
+          clientName: null,
+          status: "complete",
+          taskCount: 9,
+        },
+      ],
+      tasks: [],
+      deps: [],
+    });
+    const p = preview([{ type: "delete_project", projectId: "p2" }], ctx);
+    expect(p.removals[0]).toMatchObject({ kind: "job", name: "Old Warehouse" });
+    expect(p.removals[0].alsoRemoved).toEqual(["9 tasks"]);
+  });
+
+  it("deleting a task names its dates, and mentions nothing it does not have", () => {
+    const p = preview([{ type: "delete_task", taskId: "t2" }]);
+    expect(p.removals[0]).toMatchObject({ kind: "task", name: "Drywall" });
+    expect(p.removals[0].detail).toContain("Wed 19 Aug");
+    expect(p.removals[0].alsoRemoved).toEqual([]);
+  });
+
+  it("a deleted task is not also reported as rescheduled", () => {
+    const ctx = makeContext({
+      deps: [{ predecessorId: "t1", successorId: "t2", depType: "FS", lagDays: 0 }],
+    });
+    // Framing moves; Drywall would normally be dragged along behind it, but
+    // it is on its way out and a diff line about its new dates would be a lie.
+    const p = preview(
+      [
+        { type: "move_task", taskId: "t1", startDate: NEXT_MON },
+        { type: "delete_task", taskId: "t2" },
+      ],
+      ctx,
+    );
+    expect(p.moves.map((m) => m.name)).toEqual(["Framing"]);
+    expect(p.removals).toHaveLength(1);
+  });
+
+  it("removing one person from one task is not a deletion of either", () => {
+    const p = preview([{ type: "unassign_task", taskId: "t4", contactId: "c1" }]);
+    expect(p.removals[0]).toMatchObject({
+      kind: "assignment",
+      name: "Alex",
+      detail: "off Inspection",
+    });
+  });
+});
+
+describe("times of day", () => {
+  it("a new timed task shows its window beside its date", () => {
+    const p = preview([
+      {
+        type: "create_task",
+        projectId: "p1",
+        name: "Pour",
+        startDate: MON,
+        startTime: "06:00",
+        endTime: "10:30",
+      },
+    ]);
+    expect(p.moves[0]).toMatchObject({ name: "Pour", window: "06:00 – 10:30" });
+  });
+
+  it("a task that keeps its hours still shows them when it moves", () => {
+    const p = preview([{ type: "move_task", taskId: "t4", startDate: FRI }]);
+    expect(p.moves[0]).toMatchObject({ name: "Inspection", window: "14:00 – 15:00" });
+  });
+
+  it("changing the hours reads as before and after", () => {
+    const p = preview([
+      { type: "update_task", taskId: "t4", startTime: "09:00", endTime: "11:00" },
+    ]);
+    expect(p.edits).toContainEqual({
+      what: "Inspection hours",
+      from: "14:00 – 15:00",
+      to: "09:00 – 11:00",
+    });
+  });
+
+  it("clearing the hours reads as all day", () => {
+    const p = preview([{ type: "update_task", taskId: "t4", clearTimes: true }]);
+    expect(p.edits).toContainEqual({
+      what: "Inspection hours",
+      from: "14:00 – 15:00",
+      to: "all day",
+    });
   });
 });
 

@@ -18,11 +18,26 @@
   background: var(--canvas);
 }
 
+/*
+ * Pinned, and its own scroller — same treatment as the assistant column on the
+ * other side.
+ *
+ * It used to be an ordinary grid item that grew with its contents, so on an
+ * account with a few jobs the list pushed Sign out below the fold and the only
+ * way to reach it was to scroll the whole page past a calendar. A control
+ * everyone needs occasionally and nobody looks for twice has to be in the same
+ * place every time.
+ */
 .rail {
+  position: sticky;
+  top: 0;
+  align-self: start;
   display: flex;
   flex-direction: column;
   gap: 20px;
+  height: 100vh;
   padding: 20px 14px;
+  overflow: hidden;
   background: var(--forest);
   color: #e8ede9;
 }
@@ -79,9 +94,22 @@
   color: #9db4ac;
 }
 
+/* The jobs list is what grows, so the jobs list is what scrolls. Everything
+   above and below it — the nav, the org, Sign out — stays put. */
+.rail-section {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
 .rail-projects {
   margin: 0;
   padding: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   list-style: none;
 }
 
@@ -133,8 +161,13 @@
   text-align: center;
 }
 
+/* The rail's footer: a rule above it so it reads as its own region rather
+   than as the last item in the jobs list it happens to sit under. */
 .rail-signout-form {
+  flex: none;
   margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid rgb(255 255 255 / 0.12);
 }
 
 .rail-signout {
@@ -236,6 +269,9 @@
 .gantt-bar:focus-visible,
 .gantt-milestone:focus-visible,
 .cal-chip:focus-visible,
+.cal-block:focus-visible,
+.cal-column-head:focus-visible,
+.cal-date:focus-visible,
 .field-input:focus-visible,
 .cell-input:focus-visible,
 .disclosure-summary:focus-visible,
@@ -860,16 +896,25 @@
 }
 
 @media (max-width: 760px) {
+  /* minmax(0, 1fr), not 1fr: a `1fr` track still refuses to go below its
+     content's min-content width, so the five nav links in the collapsed rail
+     were widening the whole shell past the viewport and giving every page a
+     sideways scroll at 375px. */
   .shell {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
+  /* A bar across the top rather than a column, so nothing is pinned and
+     nothing is 100vh tall. */
   .rail {
+    position: static;
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
+    height: auto;
     padding: 10px 12px;
+    overflow: visible;
   }
 
   .rail-org,
@@ -885,15 +930,18 @@
 
   .rail-nav {
     flex-direction: row;
+    flex-wrap: wrap;
   }
 
   .rail-projects {
     display: flex;
     gap: 4px;
     overflow-x: auto;
+    overflow-y: visible;
   }
 
   .rail-section {
+    flex: 0 0 auto;
     width: 100%;
   }
 
@@ -1192,6 +1240,60 @@
 .plan-tag--new {
   background: #dce9df;
   color: #2c6149;
+}
+
+.plan-tag--remove {
+  background: #f7ddd6;
+  color: #963a24;
+}
+
+/* The time window, after the dates it belongs to. Tabular figures so a column
+   of them lines up when several tasks move at once. */
+.plan-window {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #ece9e0;
+  color: #4d5754;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/*
+ * Deletions.
+ *
+ * Every other block in this diff describes something that can be said again
+ * backwards. These cannot, so they get the one warning tint in the panel and
+ * sit at the top of the list where they are read before the Confirm button is
+ * anywhere near a thumb.
+ */
+.plan-block--remove {
+  padding: 10px 12px;
+  border: 1px solid #f0cfc4;
+  border-radius: 8px;
+  background: #fdf3ef;
+}
+
+.plan-removal + .plan-removal {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #f2ddd5;
+}
+
+.plan-removal-also {
+  margin: 2px 0 0 4px;
+  font-size: 12px;
+  color: #8a5f4f;
+}
+
+.plan-removal-warn {
+  margin: 10px 0 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #a2482e;
 }
 
 .plan-was {
@@ -1519,6 +1621,24 @@
 
 /* ── Calendar home: day / week / month / year ──────────────────────────── */
 
+/*
+ * Day and week are hour grids: a scale down the left, one column per day, and
+ * timed work drawn against the clock. Two measurements hold the whole thing
+ * together —
+ *
+ *   --cal-row   the height of one hour, and so the height of everything;
+ *   --cal-gutter the width of the scale, matched by the all-day band's label
+ *               column so the two never drift apart.
+ *
+ * Blocks are positioned in percentages of the column body, which has a
+ * definite height because its rows are fixed. That is what lets the same
+ * markup serve a six-hour day and an eighteen-hour one.
+ */
+
+.page--calendar {
+  max-width: 1320px;
+}
+
 .cal-controls {
   display: flex;
   flex-wrap: wrap;
@@ -1531,51 +1651,297 @@
   color: var(--muted);
 }
 
+.cal-note--inset {
+  margin: 0;
+  padding: 26px 18px;
+  border: 1px solid var(--line);
+  border-top: 0;
+  border-radius: 0 0 12px 12px;
+  background: var(--paper);
+  text-align: center;
+}
+
 .cal-chip--roomy {
   padding: 8px 10px;
   font-size: 13px;
   white-space: normal;
 }
 
-.cal--week .cal-day {
-  min-height: 220px;
+/* The time on a chip, before the name. Set in the chip's own text colour at
+   reduced opacity rather than a second colour: on eight different project
+   fills, a fixed grey is illegible on half of them. */
+.cal-chip-time {
+  margin-right: 6px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  opacity: 0.72;
 }
 
-.cal-day--tall {
-  min-height: 220px;
-}
+/* ── The all-day band ──────────────────────────────────────────────────── */
 
-/* Day view */
+.cal-day-view,
+.cal-week-view {
+  --cal-row: 54px;
+  --cal-gutter: 66px;
 
-.dayview {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.dayview-group {
-  padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--paper);
+  overflow: hidden;
 }
 
-.dayview-project {
-  margin: 0 0 10px;
-  font-size: 13px;
+.cal-allday {
+  display: grid;
+  grid-template-columns: var(--cal-gutter) minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: #fbfaf6;
+}
+
+.cal-allday-label {
+  padding-top: 4px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
 }
 
-.dayview-list {
+.cal-allday-items {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  gap: 6px;
+}
+
+.cal-allday-empty {
+  padding-top: 4px;
+  font-size: 12px;
+  color: #9aa39f;
+}
+
+.cal-week-allday {
+  display: grid;
+  grid-template-columns: var(--cal-gutter) repeat(7, minmax(0, 1fr));
+  border-bottom: 1px solid var(--line);
+  background: #fbfaf6;
+}
+
+.cal-week-allday .cal-allday-label {
+  padding: 10px 8px;
+}
+
+.cal-week-allday-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 44px;
+  padding: 6px 5px;
+  border-left: 1px solid var(--line);
+}
+
+.cal-week-allday-cell--today {
+  background: #fdf4ef;
+}
+
+/* ── The hour grid ─────────────────────────────────────────────────────── */
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: var(--cal-gutter);
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+}
+
+.cal-scale {
+  display: grid;
+  grid-auto-rows: var(--cal-row);
+}
+
+/* Week columns carry a date head; the scale has none, so it is padded by the
+   same amount or every label sits one head too high. */
+.cal-grid--headed .cal-scale {
+  padding-top: 48px;
+}
+
+.cal-scale-hour {
+  position: relative;
+}
+
+.cal-scale-hour i {
+  position: absolute;
+  top: 0;
+  right: 9px;
+  transform: translateY(-50%);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #9aa39f;
+  white-space: nowrap;
+}
+
+/* The first label would sit half outside the box. */
+.cal-scale-hour:first-child i {
+  transform: none;
+}
+
+.cal-column {
+  min-width: 0;
+  border-left: 1px solid var(--line);
+}
+
+.cal-column--today {
+  background: #fdfaf7;
+}
+
+.cal-column-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  height: 48px;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.cal-column-dow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.cal-column-date {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.cal-column--today .cal-column-date {
+  display: inline-grid;
+  place-items: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--clay);
+  color: #fff;
+  font-size: 13px;
+}
+
+.cal-column-body {
+  position: relative;
+  display: grid;
+  grid-auto-rows: var(--cal-row);
+  height: calc(var(--cal-rows, 12) * var(--cal-row));
+}
+
+.cal-hour-line {
+  border-top: 1px solid var(--line);
+}
+
+.cal-hour-line:first-child {
+  border-top: 0;
+}
+
+/* ── A block of timed work ─────────────────────────────────────────────── */
+
+.cal-block {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.25;
+  text-decoration: none;
+  box-shadow: 0 1px 2px rgb(23 53 50 / 0.16);
+}
+
+.cal-block:hover {
+  filter: saturate(1.15) brightness(1.06);
+  z-index: 2;
+}
+
+.cal-block-name {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cal-block-when,
+.cal-block-project {
+  font-size: 10.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.82;
+}
+
+/* Under about three quarters of an hour there is only room for one line, and
+   the name is the one that has to survive. */
+.cal-block--tight {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+  padding-block: 2px;
+}
+
+.cal-block--tight .cal-block-project {
+  display: none;
+}
+
+/* ── Now ───────────────────────────────────────────────────────────────── */
+
+/*
+ * Read on the server, in the org's timezone, so it is right on load and never
+ * ticks. A line that has to be live is a line that costs client JavaScript on
+ * a phone with one bar of signal.
+ */
+.cal-now {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 2px solid var(--clay);
+  z-index: 3;
+  pointer-events: none;
+}
+
+.cal-now::before {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--clay);
+  content: "";
+}
+
+/* Month grid: the date is a link into the day now. */
+a.cal-date {
+  align-self: flex-start;
+  min-width: 22px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  text-decoration: none;
+}
+
+a.cal-date:hover {
+  background: #eceae2;
+}
+
+.cal-day--today a.cal-date {
+  background: var(--clay);
+  color: #fff;
 }
 
 /* Year view */
@@ -1673,16 +2039,26 @@
 }
 
 @media (max-width: 760px) {
-  .cal--week {
-    grid-template-columns: 1fr;
+  /* A seven-column hour grid at 375px gives each day 40px, which fits a bar
+     and no words. It scrolls sideways instead, with the scale pinned so the
+     hour you are looking at stays named. */
+  .cal-week-view {
+    overflow-x: auto;
   }
 
-  .cal--week .cal-dow {
+  .cal-week-view .cal-week-allday,
+  .cal-week-view .cal-grid {
+    min-width: 660px;
+  }
+
+  .cal-day-view,
+  .cal-week-view {
+    --cal-row: 48px;
+    --cal-gutter: 54px;
+  }
+
+  .cal-block-project {
     display: none;
-  }
-
-  .cal-day--tall {
-    min-height: 90px;
   }
 }
 

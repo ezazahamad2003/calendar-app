@@ -41,8 +41,9 @@ export default async function AppLayout({
 
         <nav className="rail-nav" aria-label="Main">
           {/* Calendar is home — the schedule is the product, and "Today" was a
-              wrapper around content that belongs on these pages. */}
-          <Link className="rail-link" href="/">
+              wrapper around content that belongs on these pages. `/` itself is
+              the public landing page now; signing in lands here. */}
+          <Link className="rail-link" href="/calendar">
             Calendar
           </Link>
           <Link className="rail-link" href="/projects">

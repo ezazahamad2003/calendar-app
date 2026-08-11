@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Set up your company | Foreman" };
  */
 export default async function OnboardingPage() {
   const membership = await getMembership();
-  if (membership) redirect("/");
+  if (membership) redirect("/calendar");
 
   // Enumerated on the server so the option list is identical in the HTML and
   // after hydration. The Postgres function validates against pg_timezone_names

@@ -55,8 +55,11 @@ function fieldErrorsFrom(error: z.ZodError): Record<string, string> {
  */
 function safeNext(next: FormData | string | null): string {
   const raw = typeof next === "string" ? next : null;
-  if (!raw) return "/";
-  if (!raw.startsWith("/") || raw.startsWith("//")) return "/";
+  // `/` is the marketing page. Someone who has just typed their password does
+  // not want to read about the product, so signing in always lands on the
+  // schedule unless they were headed somewhere more specific.
+  if (!raw || raw === "/") return "/calendar";
+  if (!raw.startsWith("/") || raw.startsWith("//")) return "/calendar";
   return raw;
 }
 

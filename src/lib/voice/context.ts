@@ -17,6 +17,14 @@ export type PlannerProject = {
   name: string;
   jobNumber: string | null;
   clientName: string | null;
+  status: string;
+  /**
+   * Every task on the job, including the ones not in `tasks` below.
+   *
+   * Only active projects have their tasks passed in full, so this is the only
+   * honest number to put in front of someone about to delete a finished one.
+   */
+  taskCount: number;
 };
 
 export type PlannerTask = {
@@ -26,6 +34,9 @@ export type PlannerTask = {
   trade: string | null;
   startDate: string | null;
   endDate: string | null;
+  /** `HH:MM` on-site window, or null for an all-day task. */
+  startTime: string | null;
+  endTime: string | null;
   durationDays: number;
   status: string;
   isMilestone: boolean;
@@ -66,27 +77,39 @@ export async function buildPlannerContext(
   const supabase = await createClient();
   const calendar = await getWorkCalendar(orgId);
 
-  const [projectsRes, contactsRes] = await Promise.all([
+  // Every project, whatever its status — but only the active ones' tasks (see
+  // below). A job that is complete or on hold still has to be nameable: the
+  // assistant could not rename, reopen or delete one it could not see, and
+  // "delete that old job" is an ordinary thing to say. What SPEC §5 trims to
+  // keep the prompt small is the *schedule*, and that trimming still holds.
+  const [projectsRes, contactsRes, countsRes] = await Promise.all([
     supabase
       .from("projects")
       .select("id, name, job_number, client_name, status")
       .eq("org_id", orgId)
-      .eq("status", "active")
       .order("created_at", { ascending: true }),
     supabase
       .from("contacts")
       .select("id, name, company, trade, email")
       .eq("org_id", orgId)
       .order("name"),
+    supabase.from("tasks").select("project_id").eq("org_id", orgId),
   ]);
+
+  const taskCounts = new Map<string, number>();
+  for (const row of countsRes.data ?? []) {
+    taskCounts.set(row.project_id, (taskCounts.get(row.project_id) ?? 0) + 1);
+  }
 
   const projects = (projectsRes.data ?? []).map((p) => ({
     id: p.id,
     name: p.name,
     jobNumber: p.job_number,
     clientName: p.client_name,
+    status: p.status,
+    taskCount: taskCounts.get(p.id) ?? 0,
   }));
-  const projectIds = projects.map((p) => p.id);
+  const projectIds = projects.filter((p) => p.status === "active").map((p) => p.id);
 
   let tasks: PlannerTask[] = [];
   let deps: PlannerDep[] = [];
@@ -96,7 +119,7 @@ export async function buildPlannerContext(
       supabase
         .from("tasks")
         .select(
-          "id, project_id, name, trade, start_date, end_date, duration_days, status, is_milestone",
+          "id, project_id, name, trade, start_date, end_date, start_time, end_time, duration_days, status, is_milestone",
         )
         .eq("org_id", orgId)
         .in("project_id", projectIds),
@@ -121,6 +144,10 @@ export async function buildPlannerContext(
       trade: t.trade,
       startDate: t.start_date,
       endDate: t.end_date,
+      // Postgres hands back `HH:MM:SS`; everything above this line works in
+      // `HH:MM`, which is also what the model is asked to produce.
+      startTime: t.start_time ? t.start_time.slice(0, 5) : null,
+      endTime: t.end_time ? t.end_time.slice(0, 5) : null,
       durationDays: t.duration_days,
       status: t.status,
       isMilestone: t.is_milestone,

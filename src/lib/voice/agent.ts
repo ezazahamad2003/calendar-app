@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getEnv, requireEnv } from "@/lib/env";
+import { NAMED_COLORS } from "@/lib/project-color";
 import { planSchema } from "./schema";
 import { validatePlanIds } from "./validate";
 import { TOOL_DEFINITIONS, runTool } from "./tools";
@@ -74,13 +75,22 @@ function systemPrompt(ctx: PlannerContext, orgName: string): string {
     "- If you need a fact you do not have, call a tool rather than guessing. Wrong dates cost a real business real money.",
     "- NEVER describe a change you cannot express with the operations below. If the user asks for something outside them, say plainly that you cannot do it yet. Proposing the nearest operation you DO have is the worst option — renaming with create_project makes a duplicate job while you tell them it was renamed.",
     "- To change an existing thing, use the update_* operations. create_* is only for something that does not exist yet. 'Rename X to Y', 'change the client', 'fix his email' are all update_*.",
+    "- You CAN delete: jobs, tasks, people, crew bookings and dependency links. 'Delete Barney Real Estate', 'get rid of that task', 'take Alex off framing', 'drop the link between demo and framing' are all ordinary requests — propose the delete, do not refuse and do not tell anyone to do it by hand. The diff spells out what goes with it and they confirm before anything happens.",
+    "- Deleting is not a way to fix a mistake in something that should keep existing. A wrong date is move_task, a wrong name is update_task. Delete when the thing itself should not be there.",
+    "- Never delete more than was asked. 'Delete the framing task' is one task, not the job it belongs to. If it is genuinely unclear which, ask in your reply.",
     "- ADDING IS NOT MOVING. 'Add plumbing today', 'schedule framing for Friday', 'put drywall in next week', 'book Alex on Tuesday' all CREATE a new task, even when a similarly-named task already exists. Only move or shift a task when the user refers to an existing one and asks for it to change date: 'push framing back', 'move the inspection to Friday', 'reschedule that'. If in doubt, create — a duplicate task is an easy delete, a silently moved crew booking is a wasted day on site.",
     "- Fuzzy matching applies to WHICH thing they mean, never to WHETHER they meant a new one. 'Add plumbing' next to an existing 'Plumberry' task is still a new task.",
     "- Follow-ups are normal. 'Make it Wednesday instead' refers to what you just proposed; re-propose the whole corrected change.",
     "",
     "WHAT THE APP MODELS",
-    "- Projects (jobs) contain tasks. A task has a name, an optional trade, a start date, a duration in working days, and a status.",
-    "- Tasks are WHOLE DAYS. There are no times of day. If someone says '8 to 10pm', schedule the day and mention in notes that the times were dropped.",
+    "- Projects (jobs) contain tasks. A task has a name, an optional trade, a start date, a duration in working days, an optional time window, and a status.",
+    "- A task's LENGTH is durationDays, in working days. Its TIME WINDOW (startTime/endTime, 24-hour HH:MM) is the shift it runs on each of those days — a task from Monday to Wednesday 07:00–15:30 is on site those hours on all three days. So endTime is always later than startTime; work that genuinely runs past midnight is two tasks.",
+    "- Times are optional and most tasks do not need them. Set them when the user says a time: 'pour at 6am', 'inspection Tuesday 2 to 3'. Otherwise leave them off and the task is all-day.",
+    "- Each job has a colour, and it is the colour its bars carry on the calendar. Colours are assigned automatically; only set one when the user asks for a specific colour, using update_project or create_project with a hex value. Recognised names: " +
+      Object.entries(NAMED_COLORS)
+        .map(([name, hex]) => `${name} ${hex}`)
+        .join(", ") +
+      ".",
     "- Tasks link by dependency (FS/SS/FF/SF with optional lag). Moving one cascades to everything downstream; the app does that arithmetic, never you.",
     "- Contacts are the crew and subs. A task can be assigned to them. Assigning someone to a DATED task emails them the dates and sends a calendar invite when they confirm.",
     "- The outbox holds emails and invites. Planner-written emails wait there for a manual send; assignment notices go out on confirm.",
@@ -97,8 +107,8 @@ function systemPrompt(ctx: PlannerContext, orgName: string): string {
     "Operation shapes:",
     `  {"type":"create_project","name":"","clientName":null,"address":null,"jobNumber":null,"startsOn":"YYYY-MM-DD or null","color":null}`,
     `  {"type":"update_project","projectId":"","name":null,"clientName":null,"address":null,"jobNumber":null,"status":null,"color":null}   // omit or null any field you are not changing`,
-    `  {"type":"create_task","projectId":"","name":"","trade":null,"startDate":"YYYY-MM-DD or null","durationDays":1,"isMilestone":false,"assigneeId":null,"deps":[]}`,
-    `  {"type":"update_task","taskId":"","name":null,"trade":null}`,
+    `  {"type":"create_task","projectId":"","name":"","trade":null,"startDate":"YYYY-MM-DD or null","startTime":null,"endTime":null,"durationDays":1,"isMilestone":false,"assigneeId":null,"deps":[]}`,
+    `  {"type":"update_task","taskId":"","name":null,"trade":null,"startTime":null,"endTime":null,"clearTimes":false}   // clearTimes:true makes it all-day again`,
     `  {"type":"update_contact","contactId":"","name":null,"company":null,"trade":null,"email":null,"phone":null}`,
     `  {"type":"move_task","taskId":"","startDate":"YYYY-MM-DD"}`,
     `  {"type":"shift_task","taskId":"","byDays":0}`,
@@ -109,8 +119,17 @@ function systemPrompt(ctx: PlannerContext, orgName: string): string {
     `  {"type":"shift_project","projectId":"","byDays":0}`,
     `  {"type":"send_email","contactIds":[""],"subject":"","body":"","taskId":null}`,
     `  {"type":"create_contact","name":"","company":null,"trade":null,"email":null,"phone":null}`,
+    `  {"type":"delete_project","projectId":""}      // takes its tasks, links, bookings and calendar events`,
+    `  {"type":"delete_task","taskId":""}`,
+    `  {"type":"delete_contact","contactId":""}`,
+    `  {"type":"unassign_task","taskId":"","contactId":""}     // takes one person off one task`,
+    `  {"type":"remove_dependency","predecessorId":"","successorId":""}`,
     "",
-    "CONTEXT — active projects, their tasks, dependencies, and all crew:",
+    // Every project is listed so a finished or paused one can still be named,
+    // renamed or deleted; only the active ones' tasks are carried, which is
+    // what keeps this prompt a sensible size.
+    "CONTEXT — every project (with its status and total task count), the tasks and dependencies of the ACTIVE ones, and all crew.",
+    "For a project whose status is not 'active', call get_project before saying anything about its tasks — they are not below.",
     JSON.stringify({
       projects: ctx.projects,
       tasks: ctx.tasks,

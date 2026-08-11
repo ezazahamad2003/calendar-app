@@ -541,3 +541,98 @@ The plan crosses to the client and comes back. The world can move underneath it.
 - **Expect:** an answer from `list_messages`, reporting the row's real status
 - **Must not:** assert it sent without looking, and must not report a simulated
   send as a real one
+
+---
+
+## Removals
+
+The assistant could create and amend but never take away, so its own mistakes
+were the user's to undo by hand — and asked to delete a job it said "you'll
+have to do it manually", which is a strange answer from the only interface to
+the schedule. Deleting now goes through the same diff-then-confirm gate as a
+move. What makes it safe was never that the model could not propose it.
+
+### L1. Delete a job, and say what goes with it *[auto]*
+- **Say:** "delete Barney Real Estate"
+- **Expect:** one `delete_project`; the diff names the job **and** counts its
+  tasks, dependency links and crew bookings; the button reads **Delete**
+- **Must not:** refuse; must not say it cannot delete; must not set the job's
+  status to complete instead
+
+### L2. Delete a task, not its job *[manual]*
+- **Context:** "Framing" belongs to Chico Real Estate
+- **Say:** "get rid of the framing task"
+- **Expect:** one `delete_task`
+- **Must not:** `delete_project` on Chico. Deleting more than was asked is the
+  one failure here that cannot be walked back
+
+### L3. Off the task, not off the crew *[manual]*
+- **Say:** "take Alex off framing"
+- **Expect:** one `unassign_task`
+- **Must not:** `delete_contact`. Alex still exists and is still on everything
+  else
+
+### L4. Not on it in the first place *[auto]*
+- **Context:** Dave is not assigned to Framing
+- **Say:** "take Dave off framing"
+- **Expect:** a refusal naming both, before anything is proposed
+- **Must not:** a diff reading "Dave removed from Framing", which would be a
+  report of something that did not happen
+
+### L5. Unlink, don't delete *[manual]*
+- **Say:** "framing doesn't need to wait for demo any more"
+- **Expect:** one `remove_dependency`
+- **Must not:** delete either task; must not move either task
+
+### L6. Edited and deleted in one breath *[auto]*
+- **Say:** "rename framing to first fix and then delete it"
+- **Expect:** refused as a contradiction, naming the task
+- **Must not:** apply the rename and then delete the row it renamed
+
+### L7. A delete is a change like any other *[manual]*
+- **Do:** confirm a `delete_project`, then ask "what did I just do?"
+- **Expect:** `recent_changes` returns the deletion with the job's name in its
+  `before` snapshot
+- **Must not:** lose the record along with the row
+
+### L8. The calendar loses it too *[manual]*
+- **Context:** a connected Google or Outlook account, tasks already synced
+- **Do:** delete a job whose tasks have calendar events
+- **Expect:** the events are removed from the connected calendar and the reply
+  counts them
+- **Must not:** leave events behind claiming dates the app no longer holds
+
+---
+
+## Times of day
+
+Tasks were whole days and nothing else, so "pour at 6am" could only be answered
+by scheduling the day and apologising. A task now carries an optional window,
+which is one day's shift repeated across however many days the task runs.
+
+### M1. A time is a time *[manual]*
+- **Say:** "concrete pour on Thursday, 6 to 10:30"
+- **Expect:** one `create_task` with `startTime` 06:00 and `endTime` 10:30; the
+  diff shows the window beside the date
+- **Must not:** a note saying the times were dropped
+
+### M2. Overlap is drawn, not hidden *[auto]*
+- **Context:** two tasks the same day, 08:00–12:00 and 10:30–16:00
+- **Expect:** two columns in the day view, both full height for their own hours
+- **Must not:** one on top of the other, and must not a list
+
+### M3. Through the night is two tasks *[auto]*
+- **Say:** "night pour, 10pm to 4am"
+- **Expect:** refused, saying a window is one day's shift
+- **Must not:** an end time before its start, which the database refuses anyway
+
+### M4. Back to all day *[auto]*
+- **Say:** "the inspection can be any time that day"
+- **Expect:** `update_task` with `clearTimes`; the diff reads "14:00 – 15:00 →
+  all day"
+- **Must not:** delete and recreate the task
+
+### M5. The window repeats, the task does not *[auto]*
+- **Context:** a task Mon–Wed, 07:00–15:30
+- **Expect:** a block on each of the three days in the week view
+- **Must not:** one block running continuously through two nights

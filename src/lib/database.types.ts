@@ -499,6 +499,8 @@ export type Database = {
           project_id: string
           sort_order: number
           start_date: string | null
+          start_time: string | null
+          end_time: string | null
           status: Database["public"]["Enums"]["task_status"]
           trade: string | null
         }
@@ -517,6 +519,8 @@ export type Database = {
           project_id: string
           sort_order?: number
           start_date?: string | null
+          start_time?: string | null
+          end_time?: string | null
           status?: Database["public"]["Enums"]["task_status"]
           trade?: string | null
         }
@@ -535,6 +539,8 @@ export type Database = {
           project_id?: string
           sort_order?: number
           start_date?: string | null
+          start_time?: string | null
+          end_time?: string | null
           status?: Database["public"]["Enums"]["task_status"]
           trade?: string | null
         }

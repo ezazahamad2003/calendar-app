@@ -24,7 +24,8 @@ export const PREV_FRI = "2026-08-14";
 const WORKING_DAYS: IsoWeekday[] = [1, 2, 3, 4, 5];
 
 /**
- * Framing (2 days from Mon), Drywall (1 day Wed), Snagging (no dates yet).
+ * Framing (2 days from Mon), Drywall (1 day Wed), Snagging (no dates yet),
+ * Inspection (Thu, 14:00–15:00 — the one task with a time window on it).
  * Alex has an address; Dave does not — the pair that makes every
  * "never guess an address" case testable.
  */
@@ -34,7 +35,14 @@ export function makeContext(overrides: Partial<PlannerContext> = {}): PlannerCon
     timezone: "UTC",
     workingDays: [...WORKING_DAYS],
     projects: [
-      { id: "p1", name: "Chico Real Estate", jobNumber: "24-01", clientName: "Chico" },
+      {
+        id: "p1",
+        name: "Chico Real Estate",
+        jobNumber: "24-01",
+        clientName: "Chico",
+        status: "active",
+        taskCount: 4,
+      },
     ],
     tasks: [
       {
@@ -44,6 +52,8 @@ export function makeContext(overrides: Partial<PlannerContext> = {}): PlannerCon
         trade: "carpentry",
         startDate: MON,
         endDate: TUE,
+        startTime: null,
+        endTime: null,
         durationDays: 2,
         status: "planned",
         isMilestone: false,
@@ -56,6 +66,8 @@ export function makeContext(overrides: Partial<PlannerContext> = {}): PlannerCon
         trade: null,
         startDate: WED,
         endDate: WED,
+        startTime: null,
+        endTime: null,
         durationDays: 1,
         status: "planned",
         isMilestone: false,
@@ -68,10 +80,26 @@ export function makeContext(overrides: Partial<PlannerContext> = {}): PlannerCon
         trade: null,
         startDate: null,
         endDate: null,
+        startTime: null,
+        endTime: null,
         durationDays: 1,
         status: "planned",
         isMilestone: false,
         assigneeIds: [],
+      },
+      {
+        id: "t4",
+        projectId: "p1",
+        name: "Inspection",
+        trade: null,
+        startDate: THU,
+        endDate: THU,
+        startTime: "14:00",
+        endTime: "15:00",
+        durationDays: 1,
+        status: "planned",
+        isMilestone: false,
+        assigneeIds: ["c1"],
       },
     ],
     deps: [],

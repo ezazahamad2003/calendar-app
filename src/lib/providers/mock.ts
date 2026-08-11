@@ -37,6 +37,10 @@ export class MockProviderClient implements MailCalendarClient {
     console.log(`[MockProvider] updateEvent ${eventId} "${opts.subject ?? ""}"`);
   }
 
+  async deleteEvent(eventId: string): Promise<void> {
+    console.log(`[MockProvider] deleteEvent ${eventId}`);
+  }
+
   async listCalendars(): Promise<Calendar[]> {
     return [...this.calendars];
   }

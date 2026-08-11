@@ -295,3 +295,63 @@ describe("criticalPath", () => {
     expect(criticalPath(tasks, deps, MON_FRI)).toEqual(["a", "b", "c"]);
   });
 });
+
+describe("cascade with resized tasks", () => {
+  // The caller used to apply a resize by writing the new duration onto the
+  // task before handing it over. That destroyed the only record of where the
+  // task previously ended, so the cascade compared the new finish against the
+  // new finish, saw no difference, and reported no change at all — a resize
+  // that appeared in no diff and so could never be confirmed.
+  const durations = (entries: [string, number][]) => new Map(entries);
+
+  it("reports the resized task, with the end it used to have", () => {
+    const changes = cascade({
+      tasks: [task("a", "2026-03-02", 2)],
+      deps: [],
+      changed: new Map([["a", "2026-03-02"]]),
+      durations: durations([["a", 4]]),
+      calendar: MON_FRI,
+    });
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({
+      taskId: "a",
+      fromStartDate: "2026-03-02",
+      toStartDate: "2026-03-02",
+      fromEndDate: "2026-03-03",
+      toEndDate: "2026-03-05",
+    });
+  });
+
+  it("pushes the successors of a task that got longer", () => {
+    const changes = cascade({
+      tasks: [task("a", "2026-03-02", 2), task("b", "2026-03-04", 1)],
+      deps: [fs("a", "b")],
+      changed: new Map([["a", "2026-03-02"]]),
+      durations: durations([["a", 4]]),
+      calendar: MON_FRI,
+    });
+    expect(changes.find((c) => c.taskId === "b")?.toStartDate).toBe("2026-03-06");
+  });
+
+  it("pulls them back in when it got shorter", () => {
+    const changes = cascade({
+      tasks: [task("a", "2026-03-02", 4), task("b", "2026-03-06", 1)],
+      deps: [fs("a", "b")],
+      changed: new Map([["a", "2026-03-02"]]),
+      durations: durations([["a", 2]]),
+      calendar: MON_FRI,
+    });
+    expect(changes.find((c) => c.taskId === "b")?.toStartDate).toBe("2026-03-04");
+  });
+
+  it("leaves a task alone when the new duration is the old one", () => {
+    const changes = cascade({
+      tasks: [task("a", "2026-03-02", 2)],
+      deps: [],
+      changed: new Map([["a", "2026-03-02"]]),
+      durations: durations([["a", 2]]),
+      calendar: MON_FRI,
+    });
+    expect(changes).toHaveLength(0);
+  });
+});

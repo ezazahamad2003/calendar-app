@@ -47,6 +47,39 @@ export function validatePlanIds(plan: Plan, ctx: PlannerContext): Plan {
         `Nothing was changed.`,
     );
 
+  /**
+   * Deleting something the same plan is creating is incoherent, and the RPC
+   * would resolve the temp id and delete a row it inserted a moment earlier.
+   */
+  const mustExist = (kind: string, value: string, real: Set<string>) => {
+    if (value.startsWith("$")) {
+      throw new PlannerError(
+        `A plan cannot delete a ${kind} it is creating in the same breath. ` +
+          `Nothing was changed.`,
+      );
+    }
+    if (!real.has(value)) throw badId(kind, value);
+  };
+
+  /** Both ends or neither, and the end after the start. */
+  const checkWindow = (
+    label: string,
+    startTime: string | null | undefined,
+    endTime: string | null | undefined,
+  ) => {
+    if (endTime && !startTime) {
+      throw new PlannerError(
+        `${label} was given a finish time with no start time. Give both, or neither.`,
+      );
+    }
+    if (startTime && endTime && endTime <= startTime) {
+      throw new PlannerError(
+        `${label} would finish at ${endTime}, which is not after ${startTime}. ` +
+          `Times are one day's window — a task running overnight has to be two tasks.`,
+      );
+    }
+  };
+
   plan.operations.forEach((op, index) => {
     // The prefix has to match the kind. "$p0" is a project and nothing else —
     // without this, `assign_task` could name a project as its contact and pass,
@@ -66,6 +99,7 @@ export function validatePlanIds(plan: Plan, ctx: PlannerContext): Plan {
         if (op.assigneeId && !knownContact(op.assigneeId))
           throw badId("contact", op.assigneeId);
         for (const d of op.deps) if (!knownTask(d)) throw badId("task", d);
+        checkWindow(op.name, op.startTime, op.endTime);
         tempIds.add(`$t${index}`);
         break;
       }
@@ -75,10 +109,36 @@ export function validatePlanIds(plan: Plan, ctx: PlannerContext): Plan {
       case "update_contact":
         if (!knownContact(op.contactId)) throw badId("contact", op.contactId);
         break;
-      case "update_task":
+      case "resize_task": {
+        if (!knownTask(op.taskId)) throw badId("task", op.taskId);
+        // A milestone is a marker, not work — it occupies one day by
+        // definition, and create_task already forces that. Letting a resize
+        // through would leave a milestone claiming a week on the calendar,
+        // which no part of the app expects to see.
+        const target = ctx.tasks.find((t) => t.id === op.taskId);
+        if (target?.isMilestone && op.durationDays !== 1) {
+          throw new PlannerError(
+            `${target.name} is a milestone — it marks a single day and has no ` +
+              `length to change. Nothing was changed.`,
+          );
+        }
+        break;
+      }
+      case "update_task": {
+        if (!knownTask(op.taskId)) throw badId("task", op.taskId);
+        const target = ctx.tasks.find((t) => t.id === op.taskId);
+        // A one-sided edit inherits the other end from the row, so "start it at
+        // 7" on a task that finishes at 15:30 is checked against 15:30 rather
+        // than waved through and rejected by the database.
+        checkWindow(
+          target?.name ?? "That task",
+          op.startTime ?? (op.clearTimes ? null : target?.startTime),
+          op.endTime ?? (op.clearTimes ? null : target?.endTime),
+        );
+        break;
+      }
       case "move_task":
       case "shift_task":
-      case "resize_task":
       case "set_status":
         if (!knownTask(op.taskId)) throw badId("task", op.taskId);
         break;
@@ -118,8 +178,99 @@ export function validatePlanIds(plan: Plan, ctx: PlannerContext): Plan {
         tempIds.add(`$c${index}`);
         plannedContacts.set(`$c${index}`, { name: op.name, email: op.email ?? null });
         break;
+
+      case "delete_project":
+        mustExist("project", op.projectId, projectIds);
+        break;
+      case "delete_task":
+        mustExist("task", op.taskId, taskIds);
+        break;
+      case "delete_contact":
+        mustExist("contact", op.contactId, contactIds);
+        break;
+      case "unassign_task": {
+        mustExist("task", op.taskId, taskIds);
+        mustExist("contact", op.contactId, contactIds);
+        // Taking someone off work they were never on is not a no-op to report
+        // as done — it means the model matched the wrong person or the wrong
+        // task, and the user would read "Alex removed from framing" either way.
+        const task = ctx.tasks.find((t) => t.id === op.taskId);
+        if (task && !task.assigneeIds.includes(op.contactId)) {
+          const who = ctx.contacts.find((c) => c.id === op.contactId)?.name ?? "That person";
+          throw new PlannerError(
+            `${who} is not on ${task.name}, so there is nothing to take them off. ` +
+              `Nothing was changed.`,
+          );
+        }
+        break;
+      }
+      case "remove_dependency": {
+        mustExist("task", op.predecessorId, taskIds);
+        mustExist("task", op.successorId, taskIds);
+        const linked = ctx.deps.some(
+          (d) =>
+            d.predecessorId === op.predecessorId && d.successorId === op.successorId,
+        );
+        if (!linked) {
+          const from = ctx.tasks.find((t) => t.id === op.predecessorId)?.name ?? "that task";
+          const to = ctx.tasks.find((t) => t.id === op.successorId)?.name ?? "that task";
+          throw new PlannerError(
+            `${to} does not follow ${from}, so there is no link to remove. ` +
+              `Nothing was changed.`,
+          );
+        }
+        break;
+      }
     }
   });
+
+  // Second pass: nothing may be edited and deleted in the same plan.
+  //
+  // The operations apply in order, so "rename Hillcrest, then delete it" would
+  // do both and leave the user reading a diff describing a rename that outlived
+  // its subject by one statement. Caught here rather than at the database,
+  // where it surfaces after Confirm as a rolled-back "Task not found".
+  const doomedProjects = new Set<string>();
+  const doomedTasks = new Set<string>();
+  for (const op of plan.operations) {
+    if (op.type === "delete_project") {
+      doomedProjects.add(op.projectId);
+      for (const t of ctx.tasks) {
+        if (t.projectId === op.projectId) doomedTasks.add(t.id);
+      }
+    }
+    if (op.type === "delete_task") doomedTasks.add(op.taskId);
+  }
+
+  if (doomedProjects.size > 0 || doomedTasks.size > 0) {
+    const nameOfTask = (taskId: string) =>
+      ctx.tasks.find((t) => t.id === taskId)?.name ?? "that task";
+
+    for (const op of plan.operations) {
+      if (op.type.startsWith("delete_")) continue;
+
+      if ("taskId" in op && op.taskId && doomedTasks.has(op.taskId)) {
+        throw new PlannerError(
+          `That plan changes ${nameOfTask(op.taskId)} and also deletes it. ` +
+            `Pick one. Nothing was changed.`,
+        );
+      }
+      if ("projectId" in op && doomedProjects.has(op.projectId)) {
+        const name = ctx.projects.find((p) => p.id === op.projectId)?.name ?? "that job";
+        throw new PlannerError(
+          `That plan changes ${name} and also deletes it. Pick one. Nothing was changed.`,
+        );
+      }
+      if (
+        op.type === "add_dependency" &&
+        (doomedTasks.has(op.predecessorId) || doomedTasks.has(op.successorId))
+      ) {
+        throw new PlannerError(
+          `That plan links a task it also deletes. Pick one. Nothing was changed.`,
+        );
+      }
+    }
+  }
 
   return plan;
 }

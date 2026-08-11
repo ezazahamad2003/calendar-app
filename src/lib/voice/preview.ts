@@ -8,7 +8,6 @@ import {
   addWorkDays,
   cascade,
   detectCycle,
-  finishIsoDate,
   formatIsoDate,
   parseIsoDate,
   shiftTasks,
@@ -39,6 +38,23 @@ export type PreviewMove = {
   /** Direct = the user asked; otherwise it cascaded off a dependency. */
   direct: boolean;
   isNew: boolean;
+  /** "08:00 – 15:30" once the plan has been applied, or null for all day. */
+  window: string | null;
+};
+
+/**
+ * Something this plan takes away.
+ *
+ * `alsoRemoved` is the whole reason this type exists rather than a line of
+ * text: deleting a job is one click that takes its tasks, its links, its crew
+ * assignments and its calendar entries with it, and the person confirming has
+ * to be told that before they click, not after.
+ */
+export type PlanRemoval = {
+  kind: "job" | "task" | "person" | "assignment" | "link";
+  name: string;
+  detail: string | null;
+  alsoRemoved: string[];
 };
 
 export type PlanPreview = {
@@ -60,7 +76,9 @@ export type PlanPreview = {
    * "add a plumbing task, I'll date it later" from rendering an empty diff
    * with no Confirm button on it.
    */
-  newTasks: { name: string; projectName: string | null }[];
+  newTasks: { name: string; projectName: string | null; window: string | null }[];
+  /** Deletions, listed first in the UI and styled as the destructive thing they are. */
+  removals: PlanRemoval[];
   statusChanges: { name: string; from: string; to: string }[];
   assignments: { taskName: string; contactName: string }[];
   newDeps: { predecessorName: string; successorName: string; depType: string; lagDays: number }[];
@@ -93,8 +111,19 @@ export type Assembled = {
   originalDurations: Map<string, number>;
   nameOf: (id: string) => string;
   newTaskIds: Set<string>;
+  /** Existing tasks this plan removes, directly or with their project. */
+  deletedTaskIds: Set<string>;
   cycle: string[] | null;
 };
+
+/** "08:00 – 15:30", or null when the task runs all day. */
+export function formatWindow(
+  startTime: string | null | undefined,
+  endTime: string | null | undefined,
+): string | null {
+  if (!startTime) return null;
+  return endTime ? `${startTime} – ${endTime}` : startTime;
+}
 
 /**
  * Fold a Plan's operations into one engine input: existing tasks plus temp
@@ -103,13 +132,42 @@ export type Assembled = {
  * new tasks pulled into place by their predecessors.
  */
 export function assemble(plan: Plan, ctx: PlannerContext): Assembled {
-  const engineTasks: Task[] = ctx.tasks.map((t) => ({
-    id: t.id,
-    startDate: t.startDate,
-    durationDays: t.durationDays,
-    isMilestone: t.isMilestone,
-  }));
-  const engineDeps: TaskDep[] = ctx.deps.map((d) => ({ ...d }));
+  // Everything this plan removes, worked out first: a deleted task must not
+  // reach the cascade, or a predecessor moving would produce a diff line about
+  // rescheduling something that is on its way out.
+  const deletedTaskIds = new Set<string>();
+  const removedDeps: { predecessorId: string; successorId: string }[] = [];
+  for (const op of plan.operations) {
+    if (op.type === "delete_task") deletedTaskIds.add(op.taskId);
+    if (op.type === "delete_project") {
+      for (const t of ctx.tasks) {
+        if (t.projectId === op.projectId) deletedTaskIds.add(t.id);
+      }
+    }
+    if (op.type === "remove_dependency") {
+      removedDeps.push({ predecessorId: op.predecessorId, successorId: op.successorId });
+    }
+  }
+
+  const engineTasks: Task[] = ctx.tasks
+    .filter((t) => !deletedTaskIds.has(t.id))
+    .map((t) => ({
+      id: t.id,
+      startDate: t.startDate,
+      durationDays: t.durationDays,
+      isMilestone: t.isMilestone,
+    }));
+  const engineDeps: TaskDep[] = ctx.deps
+    .filter(
+      (d) =>
+        !deletedTaskIds.has(d.predecessorId) &&
+        !deletedTaskIds.has(d.successorId) &&
+        !removedDeps.some(
+          (r) =>
+            r.predecessorId === d.predecessorId && r.successorId === d.successorId,
+        ),
+    )
+    .map((d) => ({ ...d }));
   const directChanges = new Map<string, string>();
   const durationOverrides = new Map<string, number>();
   const originalDurations = new Map<string, number>();
@@ -162,16 +220,13 @@ export function assemble(plan: Plan, ctx: PlannerContext): Assembled {
         break;
       }
       case "resize_task": {
-        durationOverrides.set(op.taskId, op.durationDays);
         const t = engineTasks.find((x) => x.id === op.taskId);
         if (t) {
-          // Kept before the mutation below: the cascade computes a task's
-          // "from" dates off the same object it computes the "to" dates off,
-          // so once this is overwritten the engine can no longer tell that
-          // anything changed — which is how a resize used to produce an empty
-          // diff and no Confirm button.
+          // Handed to the cascade as an override rather than written onto the
+          // task: `t.durationDays` is where it ends *now*, and overwriting it
+          // is what used to make a resize look like no change at all.
           originalDurations.set(op.taskId, t.durationDays);
-          t.durationDays = op.durationDays;
+          durationOverrides.set(op.taskId, op.durationDays);
           // Re-anchor so the cascade re-evaluates this task's successors.
           if (t.startDate && !directChanges.has(op.taskId)) {
             directChanges.set(op.taskId, t.startDate);
@@ -214,6 +269,7 @@ export function assemble(plan: Plan, ctx: PlannerContext): Assembled {
     originalDurations,
     nameOf: (id: string) => names.get(id) ?? "unnamed task",
     newTaskIds,
+    deletedTaskIds,
     cycle: detectCycle(engineDeps),
   };
 }
@@ -311,6 +367,12 @@ function collectNotifications(
   return out;
 }
 
+/** "3 tasks", "1 dependency", or null when there are none to mention. */
+function count(n: number, singular: string, plural = `${singular}s`): string | null {
+  if (n === 0) return null;
+  return `${n} ${n === 1 ? singular : plural}`;
+}
+
 export function buildPreview(
   plan: Plan,
   ctx: PlannerContext,
@@ -328,6 +390,7 @@ export function buildPreview(
     tasks: asm.engineTasks,
     deps: asm.engineDeps,
     changed: asm.directChanges,
+    durations: asm.durationOverrides,
     calendar: ctx.calendar,
   });
 
@@ -338,6 +401,7 @@ export function buildPreview(
   const newProjects: PlanPreview["newProjects"] = [];
   const edits: PlanPreview["edits"] = [];
   const newTasks: PlanPreview["newTasks"] = [];
+  const removals: PlanRemoval[] = [];
   const statusChanges: PlanPreview["statusChanges"] = [];
   const assignments: PlanPreview["assignments"] = [];
   const newDeps: PlanPreview["newDeps"] = [];
@@ -356,6 +420,36 @@ export function buildPreview(
   });
   const nameOfContact = (id: string) =>
     contactName.get(id) ?? plannedContact.get(id)?.name ?? "someone";
+
+  /**
+   * Each task's on-site window once the plan lands — current times, overwritten
+   * by whatever this plan sets. Every date line the user reads carries it, so
+   * a move that also changes the hours cannot show one and hide the other.
+   */
+  const windows = new Map<string, { start: string | null; end: string | null }>(
+    ctx.tasks.map((t) => [t.id, { start: t.startTime, end: t.endTime }]),
+  );
+  plan.operations.forEach((op, index) => {
+    if (op.type === "create_task") {
+      windows.set(`$t${index}`, { start: op.startTime ?? null, end: op.endTime ?? null });
+    }
+    if (op.type === "update_task") {
+      const current = windows.get(op.taskId) ?? { start: null, end: null };
+      windows.set(
+        op.taskId,
+        op.clearTimes
+          ? { start: null, end: null }
+          : {
+              start: op.startTime ?? current.start,
+              end: op.endTime ?? current.end,
+            },
+      );
+    }
+  });
+  const windowFor = (taskRef: string) => {
+    const w = windows.get(taskRef);
+    return w ? formatWindow(w.start, w.end) : null;
+  };
 
   const changedTaskIds = new Set(changes.map((c) => c.taskId));
 
@@ -400,6 +494,11 @@ export function buildPreview(
         if (op.name != null) edits.push({ what: "Task name", from: label, to: op.name });
         if (op.trade != null)
           edits.push({ what: `${label} trade`, from: before?.trade ?? "—", to: op.trade });
+        if (op.clearTimes || op.startTime != null || op.endTime != null) {
+          const was = formatWindow(before?.startTime, before?.endTime) ?? "all day";
+          const now = windowFor(op.taskId) ?? "all day";
+          if (was !== now) edits.push({ what: `${label} hours`, from: was, to: now });
+        }
         break;
       }
       case "update_contact": {
@@ -461,6 +560,82 @@ export function buildPreview(
           lagDays: op.lagDays,
         });
         break;
+      // Deletions. The name of the thing, then everything that leaves with it
+      // — counted from the context rather than described in prose, because
+      // "and 11 tasks" is the number that stops a wrong confirm.
+      case "delete_project": {
+        const project = ctx.projects.find((p) => p.id === op.projectId);
+        const tasks = ctx.tasks.filter((t) => t.projectId === op.projectId);
+        const taskIdSet = new Set(tasks.map((t) => t.id));
+        const links = ctx.deps.filter(
+          (d) => taskIdSet.has(d.predecessorId) || taskIdSet.has(d.successorId),
+        );
+        const bookings = tasks.reduce((n, t) => n + t.assigneeIds.length, 0);
+        // The task count comes off the project, which counts them all; the
+        // links and bookings come off the context, which only carries an active
+        // job's schedule. So they are stated only when they were actually
+        // looked at — an under-count here would be exactly the reassurance
+        // nobody should be given before a delete.
+        const detailed = tasks.length > 0 || (project?.taskCount ?? 0) === 0;
+        removals.push({
+          kind: "job",
+          name: project?.name ?? "That job",
+          detail: project?.clientName ?? null,
+          alsoRemoved: [
+            count(project?.taskCount ?? tasks.length, "task"),
+            detailed ? count(links.length, "dependency", "dependencies") : null,
+            detailed ? count(bookings, "crew booking") : null,
+          ].filter((line): line is string => line !== null),
+        });
+        break;
+      }
+      case "delete_task": {
+        const task = ctx.tasks.find((t) => t.id === op.taskId);
+        const links = ctx.deps.filter(
+          (d) => d.predecessorId === op.taskId || d.successorId === op.taskId,
+        );
+        removals.push({
+          kind: "task",
+          name: task?.name ?? "That task",
+          detail: task?.startDate
+            ? humanRange(task.startDate, task.endDate)
+            : "no date yet",
+          alsoRemoved: [
+            count(links.length, "dependency", "dependencies"),
+            count(task?.assigneeIds.length ?? 0, "crew booking"),
+          ].filter((line): line is string => line !== null),
+        });
+        break;
+      }
+      case "delete_contact": {
+        const contact = ctx.contacts.find((c) => c.id === op.contactId);
+        const booked = ctx.tasks.filter((t) => t.assigneeIds.includes(op.contactId));
+        removals.push({
+          kind: "person",
+          name: contact?.name ?? "That person",
+          detail: contact?.company ?? contact?.trade ?? null,
+          alsoRemoved: [count(booked.length, "task booking")].filter(
+            (line): line is string => line !== null,
+          ),
+        });
+        break;
+      }
+      case "unassign_task":
+        removals.push({
+          kind: "assignment",
+          name: nameOfContact(op.contactId),
+          detail: `off ${asm.nameOf(op.taskId)}`,
+          alsoRemoved: [],
+        });
+        break;
+      case "remove_dependency":
+        removals.push({
+          kind: "link",
+          name: `${asm.nameOf(op.successorId)} no longer waits for ${asm.nameOf(op.predecessorId)}`,
+          detail: null,
+          alsoRemoved: [],
+        });
+        break;
       case "create_task":
         if (op.assigneeId) {
           assignments.push({
@@ -483,6 +658,7 @@ export function buildPreview(
             name: op.name,
             projectName:
               projectName.get(op.projectId) ?? plannedProject.get(op.projectId) ?? null,
+            window: windowFor(`$t${index}`),
           });
         }
         break;
@@ -505,23 +681,16 @@ export function buildPreview(
     }
   });
 
-  const moves: PreviewMove[] = changes.map((c) => {
-    const was = asm.originalDurations.get(c.taskId);
-    const from = taskById.get(c.taskId)?.startDate ?? c.fromStartDate;
-    return {
-      name: asm.nameOf(c.taskId),
-      fromStart: c.fromStartDate,
-      toStart: c.toStartDate,
-      // Same reason as the resize edit above: the engine's "from" end date is
-      // computed with the new duration, so it has to be restated here from the
-      // duration the task actually had.
-      fromEnd:
-        was != null && from ? finishIsoDate(from, was, ctx.calendar) : c.fromEndDate,
-      toEnd: c.toEndDate,
-      direct: c.direct,
-      isNew: asm.newTaskIds.has(c.taskId),
-    };
-  });
+  const moves: PreviewMove[] = changes.map((c) => ({
+    name: asm.nameOf(c.taskId),
+    fromStart: c.fromStartDate,
+    toStart: c.toStartDate,
+    fromEnd: c.fromEndDate,
+    toEnd: c.toEndDate,
+    direct: c.direct,
+    isNew: asm.newTaskIds.has(c.taskId),
+    window: windowFor(c.taskId),
+  }));
 
   const notify = collectNotifications(plan, ctx, asm, changes);
   const inviteAttendees = getEnv().FEATURE_INVITE_ATTENDEES;
@@ -535,6 +704,7 @@ export function buildPreview(
     edits,
     moves,
     newTasks,
+    removals,
     statusChanges,
     assignments,
     newDeps,
@@ -558,6 +728,7 @@ export function buildPreview(
       edits.length === 0 &&
       moves.length === 0 &&
       newTasks.length === 0 &&
+      removals.length === 0 &&
       statusChanges.length === 0 &&
       assignments.length === 0 &&
       newDeps.length === 0 &&

@@ -9,6 +9,14 @@ import { z } from "zod";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
+/**
+ * `HH:MM`, 24-hour. The pairing rules — an end needs a start, and it has to be
+ * later — are enforced in validate.ts rather than here, so a model that gets
+ * one wrong reads a sentence explaining it and tries again instead of hitting
+ * a regex.
+ */
+const clockTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+
 /** Ids must come from the supplied context; validated against it after parse
  *  (a hallucinated id is a hard failure, not a silent skip — SPEC §5). */
 const id = z.string().min(1);
@@ -34,6 +42,9 @@ export const operationSchema = z.discriminatedUnion("type", [
     name: z.string().trim().min(1).max(160),
     trade: z.string().trim().max(60).nullish(),
     startDate: isoDate.nullish(),
+    /** The on-site window, repeated on each day the task runs. Both or neither. */
+    startTime: clockTime.nullish(),
+    endTime: clockTime.nullish(),
     durationDays: z.number().int().min(1).max(365).default(1),
     isMilestone: z.boolean().default(false),
     assigneeId: id.nullish(),
@@ -63,6 +74,14 @@ export const operationSchema = z.discriminatedUnion("type", [
     taskId: id,
     name: z.string().trim().min(1).max(160).nullish(),
     trade: z.string().trim().max(60).nullish(),
+    /**
+     * Times, with an explicit way to take them off again. `null` means "leave
+     * this alone" like every other field here, so clearing needs its own flag
+     * — otherwise "make that an all-day job" has no expression at all.
+     */
+    startTime: clockTime.nullish(),
+    endTime: clockTime.nullish(),
+    clearTimes: z.boolean().default(false),
   }),
   z.object({
     type: z.literal("update_contact"),
@@ -116,6 +135,27 @@ export const operationSchema = z.discriminatedUnion("type", [
     trade: z.string().trim().max(60).nullish(),
     email: z.string().trim().max(200).nullish(),
     phone: z.string().trim().max(40).nullish(),
+  }),
+  /**
+   * Removals.
+   *
+   * The assistant could add and amend but never take away, so the schedule
+   * only ever grew and its own mistakes were the user's to clean up by hand.
+   * These go through the same diff-then-confirm gate as everything else; what
+   * makes them safe is not that the model is forbidden to propose them, it is
+   * that a person reads what goes with them first.
+   *
+   * Never a temp id: you cannot delete something this same plan is creating,
+   * and a plan that tries is confused rather than clever.
+   */
+  z.object({ type: z.literal("delete_project"), projectId: id }),
+  z.object({ type: z.literal("delete_task"), taskId: id }),
+  z.object({ type: z.literal("delete_contact"), contactId: id }),
+  z.object({ type: z.literal("unassign_task"), taskId: id, contactId: id }),
+  z.object({
+    type: z.literal("remove_dependency"),
+    predecessorId: id,
+    successorId: id,
   }),
 ]);
 

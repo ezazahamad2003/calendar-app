@@ -62,7 +62,7 @@ export async function createOrg(
     // A double-submit races two calls; the second hits the one-org-per-user
     // guard. The user's org exists and they should just proceed.
     if (error.code === "23505" || error.message.includes("already belong")) {
-      redirect("/");
+      redirect("/calendar");
     }
     return {
       error:
@@ -72,5 +72,5 @@ export async function createOrg(
   }
 
   revalidatePath("/", "layout");
-  redirect("/");
+  redirect("/calendar");
 }

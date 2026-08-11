@@ -181,6 +181,15 @@ export function VoicePanel() {
       if (result.calendarWritten > 0) {
         notes.push(`${result.calendarWritten} on your calendar`);
       }
+      if (result.calendarRemoved > 0) {
+        notes.push(`${result.calendarRemoved} off your calendar`);
+      }
+      // A dead grant is not "no calendar configured". The schedule changed and
+      // the calendar the user actually looks at did not, and they have to be
+      // told which.
+      if (result.calendarNeedsReauth) {
+        notes.push("calendar not updated — reconnect your account");
+      }
       if (result.calendarFailed > 0) {
         notes.push(`${result.calendarFailed} calendar write${result.calendarFailed === 1 ? "" : "s"} failed`);
       }
@@ -350,6 +359,11 @@ export function VoicePanel() {
   );
 }
 
+/** A task's days: one date, or the range it spans. */
+function span(start: string, end: string | null): string {
+  return !end || end === start ? start : `${start} – ${end}`;
+}
+
 /** The diff, read before anything is written. */
 function PlanReview({
   preview: p,
@@ -380,6 +394,29 @@ function PlanReview({
         <p className="plan-note">
           <strong>Note:</strong> {p.notes}
         </p>
+      ) : null}
+
+      {/* First, and loudest. Everything else in this diff can be redone by
+          saying the opposite; these lines cannot, so they are read first. */}
+      {p.removals.length > 0 ? (
+        <div className="plan-block plan-block--remove">
+          <p className="assistant-label">Deletes</p>
+          {p.removals.map((r, i) => (
+            <div key={`r${i}`} className="plan-removal">
+              <p className="plan-line">
+                <span className="plan-tag plan-tag--remove">{r.kind}</span>{" "}
+                <strong>{r.name}</strong>
+                {r.detail ? ` · ${r.detail}` : ""}
+              </p>
+              {r.alsoRemoved.length > 0 ? (
+                <p className="plan-removal-also">
+                  Goes with it: {r.alsoRemoved.join(", ")}
+                </p>
+              ) : null}
+            </div>
+          ))}
+          <p className="plan-removal-warn">This cannot be undone.</p>
+        </div>
       ) : null}
 
       {p.newProjects.length > 0 ? (
@@ -423,15 +460,22 @@ function PlanReview({
               {mv.isNew ? (
                 <>
                   <span className="plan-tag plan-tag--new">New</span>{" "}
-                  {mv.toStart === mv.toEnd ? mv.toStart : `${mv.toStart} – ${mv.toEnd}`}
+                  {span(mv.toStart, mv.toEnd)}
+                  {mv.window ? <span className="plan-window">{mv.window}</span> : null}
                 </>
               ) : (
                 <>
                   <span className="plan-tag">
                     {mv.direct ? "Moved" : "Knock-on"}
                   </span>{" "}
-                  <span className="plan-was">{mv.fromStart ?? "unscheduled"}</span> →{" "}
-                  {mv.toStart}
+                  {/* Both ends, not just the start. A task that got longer
+                      keeps the same start date, so a line showing only starts
+                      renders a resize as "Mon 17 → Mon 17". */}
+                  <span className="plan-was">
+                    {mv.fromStart ? span(mv.fromStart, mv.fromEnd) : "unscheduled"}
+                  </span>{" "}
+                  → {span(mv.toStart, mv.toEnd)}
+                  {mv.window ? <span className="plan-window">{mv.window}</span> : null}
                 </>
               )}
             </p>
@@ -450,6 +494,7 @@ function PlanReview({
               <span className="plan-tag plan-tag--new">New</span>{" "}
               <strong>{t.name}</strong>
               {t.projectName ? ` · ${t.projectName}` : ""} · no date yet
+              {t.window ? <span className="plan-window">{t.window}</span> : null}
             </p>
           ))}
         </div>
@@ -519,8 +564,16 @@ function PlanReview({
           <button type="button" className="btn btn--ghost" onClick={onDiscard} disabled={busy}>
             Discard
           </button>
-          <button type="button" className="btn" onClick={onConfirm} disabled={busy}>
-            Confirm
+          {/* The button says what it does. A red "Confirm" is still a button
+              whose label promises nothing in particular; "Delete" is the word
+              the user will look for before pressing it. */}
+          <button
+            type="button"
+            className={`btn${p.removals.length > 0 ? " btn--danger" : ""}`}
+            onClick={onConfirm}
+            disabled={busy}
+          >
+            {p.removals.length > 0 ? "Delete" : "Confirm"}
           </button>
         </div>
       )}

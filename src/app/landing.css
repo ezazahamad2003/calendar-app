@@ -1,0 +1,664 @@
+/*
+ * The public landing page.
+ *
+ * Same materials as the app — forest, clay, cream, Georgia over Inter — so the
+ * first screen and the first day look like the same product. Two things are
+ * new and both come from the subject rather than from decoration:
+ *
+ *   · a blueprint rule behind the hero, faint enough to read as paper;
+ *   · monospace for every date, week tick and job number, because that is what
+ *     schedules and drawings are set in.
+ *
+ * One loud element, the cascade strip. Everything else stays quiet.
+ */
+
+.lp {
+  --lp-rule: rgb(23 53 50 / 0.09);
+  --lp-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --lp-serif: Georgia, "Times New Roman", serif;
+
+  min-height: 100vh;
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+.lp-inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* ── Top bar ────────────────────────────────────────────────────────────── */
+
+.lp-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 20px 24px;
+}
+
+.lp-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-family: var(--lp-serif);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--forest);
+}
+
+/* The corner clipped off the bottom-left is the app's mark: a bar on a chart
+   with one end squared to the baseline. */
+.lp-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px 9px 9px 2px;
+  background: var(--clay);
+  color: #fff;
+  font-family: Inter, sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.lp-top-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Buttons and links ──────────────────────────────────────────────────── */
+
+.lp-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 22px;
+  border: 1px solid var(--forest);
+  border-radius: 9px;
+  background: var(--forest);
+  color: #fff;
+  font-weight: 650;
+  font-size: 15px;
+  text-decoration: none;
+  transition: background 0.16s ease;
+}
+
+.lp-btn:hover {
+  background: var(--forest-2);
+}
+
+.lp-btn--small {
+  min-height: 40px;
+  padding: 0 15px;
+  font-size: 14px;
+}
+
+.lp-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 6px;
+  color: var(--forest);
+  font-weight: 600;
+  font-size: 15px;
+  text-decoration: none;
+}
+
+.lp-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.lp-link--arrow::after {
+  margin-left: 7px;
+  content: "→";
+}
+
+.lp a:focus-visible {
+  outline: 2px solid var(--sage);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* ── Shared type ────────────────────────────────────────────────────────── */
+
+.lp-eyebrow {
+  margin: 0 0 14px;
+  font-family: var(--lp-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--clay);
+}
+
+.lp-eyebrow--light {
+  color: #d9a08d;
+}
+
+.lp-h2 {
+  margin: 0 0 10px;
+  font-family: var(--lp-serif);
+  font-size: clamp(26px, 3.6vw, 36px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.12;
+  color: var(--forest);
+}
+
+.lp-sub {
+  max-width: 58ch;
+  margin: 0 0 34px;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+/* ── Hero ───────────────────────────────────────────────────────────────── */
+
+.lp-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  gap: 56px;
+  align-items: center;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 40px 24px 76px;
+}
+
+/* Site paper. Two hairlines on a 32px module, stopping well short of the
+   fold so it never competes with the strip sitting on top of it. */
+.lp-hero::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0 0 auto;
+  height: 560px;
+  background-image:
+    linear-gradient(var(--lp-rule) 1px, transparent 1px),
+    linear-gradient(90deg, var(--lp-rule) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: linear-gradient(180deg, rgb(0 0 0 / 0.55), transparent 78%);
+  content: "";
+  pointer-events: none;
+}
+
+.lp {
+  position: relative;
+  isolation: isolate;
+}
+
+.lp-title {
+  margin: 0 0 20px;
+  font-family: var(--lp-serif);
+  font-size: clamp(38px, 6vw, 60px);
+  font-weight: 600;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  color: var(--forest);
+}
+
+/* The second line is the promise the first one leaves open, so it is set
+   quieter and on its own line rather than run together. */
+.lp-title-sub {
+  display: block;
+  margin-top: 6px;
+  color: var(--sage);
+}
+
+.lp-lede {
+  max-width: 46ch;
+  margin: 0 0 30px;
+  font-size: 17px;
+  line-height: 1.62;
+  color: #46524f;
+}
+
+.lp-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ── The cascade strip ──────────────────────────────────────────────────── */
+
+.lp-demo {
+  margin: 0;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper);
+  box-shadow:
+    0 1px 2px rgb(23 53 50 / 0.04),
+    0 18px 44px rgb(23 53 50 / 0.09);
+}
+
+.lp-said {
+  margin: 0 0 20px;
+  padding: 0 0 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.lp-said-label {
+  display: block;
+  margin-bottom: 7px;
+  font-family: var(--lp-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.lp-said q {
+  display: block;
+  font-family: var(--lp-serif);
+  font-size: clamp(17px, 2.1vw, 21px);
+  line-height: 1.35;
+  color: var(--forest);
+}
+
+.lp-strip-scale {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  margin: 0 0 10px 132px;
+  font-family: var(--lp-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: #9aa3a0;
+}
+
+.lp-strip-row {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr) 74px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+}
+
+.lp-strip-name {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+.lp-strip-name span {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--lp-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* 15 half-week columns across the six-week scale. */
+.lp-strip-track {
+  display: grid;
+  grid-template-columns: repeat(15, 1fr);
+  align-items: center;
+  height: 26px;
+  border-radius: 6px;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0,
+    transparent calc(100% / 6 - 1px),
+    var(--lp-rule) calc(100% / 6 - 1px),
+    var(--lp-rule) calc(100% / 6)
+  );
+}
+
+.lp-bar {
+  grid-row: 1;
+  height: 15px;
+  border-radius: 4px;
+}
+
+/* Where it was: an outline, so the eye reads it as a memory of a bar rather
+   than a second booking. */
+.lp-bar--was {
+  display: grid;
+  align-items: center;
+  border: 1px dashed #c3ccc8;
+  background: transparent;
+}
+
+.lp-bar--was i {
+  display: block;
+  height: 1px;
+  margin: 0 5px;
+  background: #d3dad6;
+}
+
+.lp-bar--now {
+  animation: lp-slide 0.7s cubic-bezier(0.22, 0.9, 0.3, 1) both;
+}
+
+.lp-bar--direct {
+  background: var(--clay);
+  box-shadow: inset 3px 0 0 #a83f26;
+}
+
+.lp-bar--knock-on {
+  background: var(--sage);
+  box-shadow: inset 3px 0 0 #2f5b55;
+}
+
+.lp-strip-row:nth-child(3) .lp-bar--now { animation-delay: 0.08s; }
+.lp-strip-row:nth-child(4) .lp-bar--now { animation-delay: 0.16s; }
+
+@keyframes lp-slide {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.lp-strip-note {
+  margin: 0;
+  font-family: var(--lp-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: right;
+  color: var(--muted);
+}
+
+.lp-strip-row:first-of-type .lp-strip-note {
+  color: var(--clay);
+}
+
+.lp-demo-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 0;
+  padding-top: 15px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.lp-demo-foot strong {
+  color: var(--forest);
+}
+
+.lp-demo-mail {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #eef2ef;
+  font-family: var(--lp-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--forest);
+}
+
+/* ── Pipeline band ──────────────────────────────────────────────────────── */
+
+.lp-band {
+  padding: 66px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: #efeee7;
+}
+
+.lp-chain {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: none;
+}
+
+.lp-chain li {
+  position: relative;
+  padding: 0 20px 0 0;
+}
+
+/* The connector is the dependency arrow from the Gantt, reused: these four
+   steps are literally finish-to-start on one another. */
+.lp-chain li:not(:last-child)::after {
+  position: absolute;
+  top: 15px;
+  right: 12px;
+  left: 44px;
+  height: 1px;
+  background: linear-gradient(90deg, #cfd6d2 60%, transparent);
+  content: "";
+}
+
+.lp-chain-n {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-bottom: 16px;
+  border: 1px solid #cfd6d2;
+  border-radius: 50%;
+  background: var(--canvas);
+  font-family: var(--lp-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--forest);
+}
+
+.lp-chain li:last-child .lp-chain-n {
+  border-color: var(--clay);
+  background: var(--clay);
+  color: #fff;
+}
+
+.lp-chain h3 {
+  margin: 0 0 7px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--forest);
+}
+
+.lp-chain p {
+  margin: 0;
+  padding-right: 8px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #59635f;
+}
+
+/* ── Features ───────────────────────────────────────────────────────────── */
+
+.lp-features {
+  padding-top: 70px;
+  padding-bottom: 70px;
+}
+
+.lp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(268px, 1fr));
+  gap: 1px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.lp-card {
+  padding: 24px 22px 26px;
+  background: var(--paper);
+}
+
+.lp-card h3 {
+  margin: 0 0 8px;
+  font-family: var(--lp-serif);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--forest);
+}
+
+.lp-card p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #59635f;
+}
+
+/* ── The vow ────────────────────────────────────────────────────────────── */
+
+.lp-vow {
+  padding: 74px 0;
+  background: var(--forest);
+  color: #dfe9e5;
+}
+
+.lp-vow-inner {
+  max-width: 780px;
+}
+
+.lp-vow-title {
+  margin: 0 0 18px;
+  font-family: var(--lp-serif);
+  font-size: clamp(26px, 4vw, 40px);
+  font-weight: 600;
+  line-height: 1.14;
+  letter-spacing: -0.025em;
+  color: #fff;
+}
+
+.lp-vow-body {
+  max-width: 62ch;
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.68;
+  color: #b7cbc5;
+}
+
+/* ── Close and footer ───────────────────────────────────────────────────── */
+
+.lp-close {
+  padding-top: 72px;
+  padding-bottom: 84px;
+  text-align: center;
+}
+
+.lp-close .lp-sub {
+  margin-inline: auto;
+}
+
+.lp-close .lp-cta {
+  justify-content: center;
+}
+
+.lp-foot {
+  padding: 22px 24px 34px;
+  border-top: 1px solid var(--line);
+  text-align: center;
+}
+
+.lp-foot p {
+  margin: 0;
+  font-family: var(--lp-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: #98a19e;
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+
+@media (max-width: 940px) {
+  .lp-hero {
+    grid-template-columns: 1fr;
+    gap: 40px;
+    padding-bottom: 56px;
+  }
+
+  .lp-chain {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 30px 0;
+  }
+
+  .lp-chain li:nth-child(2)::after {
+    display: none;
+  }
+}
+
+@media (max-width: 620px) {
+  .lp-hero {
+    padding-top: 24px;
+  }
+
+  .lp-chain {
+    grid-template-columns: 1fr;
+    gap: 26px;
+  }
+
+  .lp-chain li::after {
+    display: none;
+  }
+
+  .lp-demo {
+    padding: 15px;
+  }
+
+  /* The job names sit above their bars rather than beside them: at this width
+     a 132px label column leaves the six-week scale unreadable. */
+  .lp-strip-scale {
+    margin-left: 0;
+  }
+
+  .lp-strip-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 10px;
+    padding: 10px 0;
+  }
+
+  /* Explicit placement, not auto: the full-width track claims a row of its
+     own, and anything auto-placed after it lands on a third row instead of
+     beside the name. */
+  .lp-strip-name {
+    grid-area: 1 / 1;
+  }
+
+  .lp-strip-note {
+    grid-area: 1 / 2;
+    align-self: center;
+  }
+
+  .lp-strip-track {
+    grid-area: 2 / 1 / 3 / -1;
+  }
+
+  .lp-btn,
+  .lp-link {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .lp-top-nav .lp-btn--small,
+  .lp-top-nav .lp-link {
+    width: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-bar--now {
+    animation: none;
+  }
+}

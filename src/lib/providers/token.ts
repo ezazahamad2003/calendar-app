@@ -117,7 +117,7 @@ export class ConnectionSession {
 
   /** Authenticated fetch with the shared 401/403 → re-consent translation. */
   async call<T>(
-    method: "GET" | "POST" | "PATCH",
+    method: "GET" | "POST" | "PATCH" | "DELETE",
     url: string,
     body?: unknown,
   ): Promise<T> {
@@ -137,6 +137,13 @@ export class ConnectionSession {
           `Reconnect it from Connections.`,
         this.provider,
       );
+    }
+    // Deleting something that is already gone is the outcome the caller wanted.
+    // Both providers report it as 404, Google sometimes as 410, and treating
+    // either as a failure would leave a task undeletable because of an event
+    // the user tidied up by hand last week.
+    if (method === "DELETE" && (res.status === 404 || res.status === 410)) {
+      return undefined as T;
     }
     if (!res.ok) {
       const detail = await res.text().catch(() => "");

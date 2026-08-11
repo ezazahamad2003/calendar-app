@@ -104,7 +104,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     function: {
       name: "propose_changes",
       description:
-        "Propose a change to the schedule. This does NOT apply anything — it returns a diff the user reads and confirms. Call it once you know exactly what should happen. Everything that writes goes through here: creating projects, tasks and contacts, moving and resizing tasks, assigning people, linking dependencies, and sending email.",
+        "Propose a change to the schedule. This does NOT apply anything — it returns a diff the user reads and confirms. Call it once you know exactly what should happen. Everything that writes goes through here: creating projects, tasks and contacts; renaming and recolouring them; moving, resizing and re-timing tasks; assigning and unassigning people; linking and unlinking dependencies; deleting any of it; and sending email.",
       parameters: obj(
         {
           summary: str("One sentence, read back to the user before they confirm."),
@@ -213,7 +213,9 @@ async function getProject(orgId: string, projectId: string, ctx: PlannerContext)
     await Promise.all([
       supabase
         .from("tasks")
-        .select("id, name, trade, start_date, end_date, duration_days, status, is_milestone")
+        .select(
+          "id, name, trade, start_date, end_date, start_time, end_time, duration_days, status, is_milestone",
+        )
         .eq("org_id", orgId)
         .eq("project_id", projectId),
       supabase
@@ -276,6 +278,8 @@ async function getProject(orgId: string, projectId: string, ctx: PlannerContext)
       when: t.start_date ? humanRange(t.start_date, t.end_date) : "unscheduled",
       startDate: t.start_date,
       endDate: t.end_date,
+      startTime: t.start_time ? t.start_time.slice(0, 5) : null,
+      endTime: t.end_time ? t.end_time.slice(0, 5) : null,
       days: t.duration_days,
       onCriticalPath: critical.has(t.id),
       assignees: (assigns ?? [])

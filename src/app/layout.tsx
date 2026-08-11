@@ -2,10 +2,14 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./auth.css";
 import "./app.css";
+import "./landing.css";
 
 export const metadata: Metadata = {
-  title: "Foreman | Construction Schedule",
-  description: "AI-assisted crew and project scheduling for Northstar Builders.",
+  // Pages override this. The landing page sets its own, which is the one that
+  // ends up in search results and link previews.
+  title: "Foreman — construction scheduling you can talk to",
+  description:
+    "Move a date by saying so. Foreman cascades the dependent tasks, drafts the email and waits for you to confirm.",
 };
 
 export const viewport: Viewport = {

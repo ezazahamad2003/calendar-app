@@ -27,9 +27,21 @@ export type SyncResult = {
   failed: number;
   /** No account connected — nothing was pushed anywhere. */
   skipped: boolean;
+  /**
+   * An account *is* connected but its grant is dead. Distinct from `skipped`,
+   * which means there was never anywhere to push to: this one is a calendar
+   * the user believes is being kept up to date and silently is not.
+   */
+  needsReauth: boolean;
 };
 
-const NOTHING: SyncResult = { created: 0, updated: 0, failed: 0, skipped: true };
+const NOTHING: SyncResult = {
+  created: 0,
+  updated: 0,
+  failed: 0,
+  skipped: true,
+  needsReauth: false,
+};
 
 export async function syncTasksToCalendar(
   orgId: string,
@@ -38,17 +50,17 @@ export async function syncTasksToCalendar(
 ): Promise<SyncResult> {
   if (taskIds.length === 0) return { ...NOTHING, skipped: false };
 
-  const { client, mocked, provider } = await providerClientFor(orgId, userId);
+  const { client, mocked, provider, needsReauth } = await providerClientFor(orgId, userId);
   // A mock client would hand back fixture ids that then get stored as if they
   // were real, and the next update would PATCH an id no provider knows.
-  if (mocked || !provider) return NOTHING;
+  if (mocked || !provider) return { ...NOTHING, needsReauth };
 
   const supabase = await createClient();
   const [{ data: tasks }, { data: org }] = await Promise.all([
     supabase
       .from("tasks")
       .select(
-        "id, name, start_date, end_date, notes, calendar_event_id, calendar_provider, projects(name)",
+        "id, name, start_date, end_date, start_time, end_time, notes, calendar_event_id, calendar_provider, projects(name)",
       )
       .eq("org_id", orgId)
       .in("id", taskIds),
@@ -90,6 +102,9 @@ export async function syncTasksToCalendar(
       subject: `${task.name}${task.projects?.name ? ` — ${task.projects.name}` : ""}`,
       startDate: task.start_date,
       endDate: task.end_date ?? task.start_date,
+      // `HH:MM:SS` from Postgres; the providers want `HH:MM`.
+      startTime: task.start_time ? task.start_time.slice(0, 5) : null,
+      endTime: task.end_time ? task.end_time.slice(0, 5) : null,
       timeZone,
       body: task.notes ?? undefined,
       attendees: inviteAttendees ? attendeesByTask.get(task.id) : undefined,
@@ -123,5 +138,50 @@ export async function syncTasksToCalendar(
     }
   }
 
-  return { created, updated, failed, skipped: false };
+  return { created, updated, failed, skipped: false, needsReauth: false };
+}
+
+/** An event left behind by a row that no longer exists. */
+export type OrphanedEvent = { eventId: string; provider: string | null };
+
+/**
+ * Take deleted tasks' events off the connected calendar.
+ *
+ * Called after the delete has already committed, with ids the RPC handed back
+ * from the rows it removed. Without this, deleting a job leaves its whole
+ * schedule sitting on the contractor's Google or Outlook calendar with nothing
+ * in the app pointing at it — unreachable through Foreman and, worse, still
+ * showing dates the app no longer believes.
+ *
+ * Only events the CURRENT provider issued are touched: an id minted by Google
+ * means nothing to Graph, and asking Graph to delete it would either 404
+ * harmlessly or, far worse, match something unrelated.
+ *
+ * Never throws, same as the sync above.
+ */
+export async function deleteCalendarEvents(
+  orgId: string,
+  userId: string,
+  events: OrphanedEvent[],
+): Promise<{ removed: number; failed: number; skipped: boolean }> {
+  if (events.length === 0) return { removed: 0, failed: 0, skipped: false };
+
+  const { client, mocked, provider } = await providerClientFor(orgId, userId);
+  if (mocked || !provider) return { removed: 0, failed: 0, skipped: true };
+
+  let removed = 0;
+  let failed = 0;
+
+  for (const event of events) {
+    if (!event.eventId || event.provider !== provider) continue;
+    try {
+      await client.deleteEvent(event.eventId);
+      removed += 1;
+    } catch (err) {
+      failed += 1;
+      if (err instanceof ProviderAuthError) break;
+    }
+  }
+
+  return { removed, failed, skipped: false };
 }

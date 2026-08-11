@@ -48,14 +48,29 @@ export class MicrosoftClient implements MailCalendarClient {
       out.body = { contentType: "Text", content: opts.body };
     }
     if (opts.startDate && opts.endDate && opts.timeZone) {
-      const end = new Date(`${opts.endDate}T00:00:00Z`);
-      end.setUTCDate(end.getUTCDate() + 1);
-      out.isAllDay = true;
-      out.start = { dateTime: `${opts.startDate}T00:00:00`, timeZone: opts.timeZone };
-      out.end = {
-        dateTime: `${end.toISOString().slice(0, 10)}T00:00:00`,
-        timeZone: opts.timeZone,
-      };
+      if (opts.startTime && opts.endTime) {
+        // One day's shift, both ends on the same date. isAllDay must be sent
+        // explicitly as false: PATCHing a timed window onto an event Graph
+        // still believes is all-day is rejected outright.
+        out.isAllDay = false;
+        out.start = {
+          dateTime: `${opts.startDate}T${opts.startTime}:00`,
+          timeZone: opts.timeZone,
+        };
+        out.end = {
+          dateTime: `${opts.startDate}T${opts.endTime}:00`,
+          timeZone: opts.timeZone,
+        };
+      } else {
+        const end = new Date(`${opts.endDate}T00:00:00Z`);
+        end.setUTCDate(end.getUTCDate() + 1);
+        out.isAllDay = true;
+        out.start = { dateTime: `${opts.startDate}T00:00:00`, timeZone: opts.timeZone };
+        out.end = {
+          dateTime: `${end.toISOString().slice(0, 10)}T00:00:00`,
+          timeZone: opts.timeZone,
+        };
+      }
     }
     if (opts.attendees) {
       // Subs as attendees, so accept/decline flows back (SPEC §6).
@@ -85,6 +100,12 @@ export class MicrosoftClient implements MailCalendarClient {
       `${GRAPH}/me/events/${encodeURIComponent(eventId)}`,
       MicrosoftClient.eventBody(opts),
     );
+  }
+
+  async deleteEvent(eventId: string): Promise<void> {
+    // Graph events are addressable from /me/events whichever calendar they
+    // live on, so the calendar id is not needed to remove one.
+    await this.session.call("DELETE", `${GRAPH}/me/events/${encodeURIComponent(eventId)}`);
   }
 
   async listCalendars(): Promise<Calendar[]> {

@@ -59,6 +59,17 @@ export type CascadeInput = {
   deps: readonly TaskDep[];
   /** Tasks the user moved directly, with their new starts. */
   changed: ReadonlyMap<TaskId, IsoDate>;
+  /**
+   * Tasks the user resized, with their new lengths. `tasks` stays as it is —
+   * the current state — and this is what it becomes.
+   *
+   * Passed in rather than applied by the caller for one reason: a task's
+   * *previous* finish is derived from its duration, so a caller that edits
+   * `tasks` in place destroys the only record of where the task used to end.
+   * The cascade then compares the new finish against the new finish, decides
+   * nothing moved, and reports no change — a resize that appeared in no diff.
+   */
+  durations?: ReadonlyMap<TaskId, number>;
   calendar: WorkCalendar;
 };
 
@@ -78,7 +89,10 @@ export type CascadeInput = {
  * them directly; inventing a date for them would be a guess.
  */
 export function cascade(input: CascadeInput): TaskChange[] {
-  const { tasks, deps, changed, calendar } = input;
+  const { tasks, deps, changed, durations, calendar } = input;
+
+  /** What a task's duration becomes. `task.durationDays` is what it was. */
+  const durationOf = (task: Task) => durations?.get(task.id) ?? task.durationDays;
 
   // Reject cycles before doing any arithmetic — a cyclic graph has no
   // well-defined schedule and topologicalOrder would throw a vaguer error.
@@ -132,8 +146,8 @@ export function cascade(input: CascadeInput): TaskChange[] {
         const candidate = earliestStartFor(
           dep,
           predStart,
-          predTask.durationDays,
-          task.durationDays,
+          durationOf(predTask),
+          durationOf(task),
           calendar,
         );
         if (!earliest || candidate.getTime() > earliest.getTime()) {
@@ -150,8 +164,10 @@ export function cascade(input: CascadeInput): TaskChange[] {
     startById.set(taskId, resolved);
 
     const toStart = formatIsoDate(resolved);
-    const toEnd = formatIsoDate(finishDate(resolved, task.durationDays, calendar));
+    const toEnd = formatIsoDate(finishDate(resolved, durationOf(task), calendar));
     const fromStart = task.startDate;
+    // Deliberately the task's own duration, not the new one: this is where it
+    // used to end.
     const fromEnd = task.startDate
       ? formatIsoDate(
           finishDate(parseIsoDate(task.startDate), task.durationDays, calendar),

@@ -87,6 +87,21 @@ describe("invariant 5 — temp ids", () => {
   });
 });
 
+describe("invariant 3 — no operation for it means no operation", () => {
+  it("I11: a milestone has no length to change", () => {
+    const milestones = makeContext();
+    milestones.tasks[0].isMilestone = true;
+    milestones.tasks[0].durationDays = 1;
+    const plan = makePlan([{ type: "resize_task", taskId: "t1", durationDays: 5 }]);
+    expect(() => validatePlanIds(plan, milestones)).toThrow(/milestone/i);
+  });
+
+  it("still allows a resize of ordinary work", () => {
+    const plan = makePlan([{ type: "resize_task", taskId: "t1", durationDays: 5 }]);
+    expect(() => validatePlanIds(plan, ctx)).not.toThrow();
+  });
+});
+
 describe("invariant 5 — Foreman never guesses an address", () => {
   it("E9: refuses to mail a contact with no address on file", () => {
     const plan = makePlan([
@@ -107,6 +122,117 @@ describe("invariant 5 — Foreman never guesses an address", () => {
     const plan = makePlan([
       { type: "create_contact", name: "Sam", email: "sam@example.com" },
       { type: "send_email", contactIds: ["$c0"], subject: "Tuesday", body: "You're on." },
+    ]);
+    expect(() => validatePlanIds(plan, ctx)).not.toThrow();
+  });
+});
+
+describe("deletes are checked as hard as everything else", () => {
+  it("refuses to delete something the same plan is creating", () => {
+    const plan = makePlan([
+      { type: "create_project", name: "Chico Flats" },
+      { type: "delete_project", projectId: "$p0" },
+    ]);
+    expect(() => validatePlanIds(plan, ctx)).toThrow(/creating in the same breath/);
+  });
+
+  it("refuses to delete a task that does not exist", () => {
+    const plan = makePlan([{ type: "delete_task", taskId: "t99" }]);
+    expect(() => validatePlanIds(plan, ctx)).toThrow(/t99/);
+  });
+
+  it("refuses to edit and delete the same thing in one plan", () => {
+    const plan = makePlan([
+      { type: "update_task", taskId: "t1", name: "Framing v2" },
+      { type: "delete_task", taskId: "t1" },
+    ]);
+    expect(() => validatePlanIds(plan, ctx)).toThrow(/Pick one/);
+  });
+
+  it("refuses to move a task whose whole job this plan deletes", () => {
+    const plan = makePlan([
+      { type: "delete_project", projectId: "p1" },
+      { type: "move_task", taskId: "t1", startDate: MON },
+    ]);
+    expect(() => validatePlanIds(plan, ctx)).toThrow(/Pick one/);
+  });
+
+  it("refuses to take someone off work they were never on", () => {
+    const plan = makePlan([{ type: "unassign_task", taskId: "t1", contactId: "c2" }]);
+    expect(() => validatePlanIds(plan, ctx)).toThrow(/Dave is not on Framing/);
+  });
+
+  it("allows taking someone off work they are actually on", () => {
+    const plan = makePlan([{ type: "unassign_task", taskId: "t4", contactId: "c1" }]);
+    expect(() => validatePlanIds(plan, ctx)).not.toThrow();
+  });
+
+  it("refuses to unlink two tasks that were never linked", () => {
+    const plan = makePlan([
+      { type: "remove_dependency", predecessorId: "t1", successorId: "t2" },
+    ]);
+    expect(() => validatePlanIds(plan, ctx)).toThrow(/no link to remove/);
+  });
+
+  it("allows unlinking a dependency that exists", () => {
+    const linked = makeContext({
+      deps: [{ predecessorId: "t1", successorId: "t2", depType: "FS", lagDays: 0 }],
+    });
+    const plan = makePlan([
+      { type: "remove_dependency", predecessorId: "t1", successorId: "t2" },
+    ]);
+    expect(() => validatePlanIds(plan, linked)).not.toThrow();
+  });
+
+  it("accepts an ordinary delete of a real job", () => {
+    const plan = makePlan([{ type: "delete_project", projectId: "p1" }]);
+    expect(() => validatePlanIds(plan, ctx)).not.toThrow();
+  });
+});
+
+describe("time windows are one day's shift", () => {
+  it("refuses a finish time with no start", () => {
+    const plan = makePlan([
+      { type: "create_task", projectId: "p1", name: "Pour", startDate: MON, endTime: "15:00" },
+    ]);
+    expect(() => validatePlanIds(plan, ctx)).toThrow(/no start time/);
+  });
+
+  it("refuses a window that runs through midnight", () => {
+    const plan = makePlan([
+      {
+        type: "create_task",
+        projectId: "p1",
+        name: "Night pour",
+        startDate: MON,
+        startTime: "22:00",
+        endTime: "04:00",
+      },
+    ]);
+    expect(() => validatePlanIds(plan, ctx)).toThrow(/two tasks/);
+  });
+
+  it("checks a one-sided edit against the time already on the task", () => {
+    // Inspection finishes at 15:00; starting it at 16:00 is backwards.
+    const plan = makePlan([{ type: "update_task", taskId: "t4", startTime: "16:00" }]);
+    expect(() => validatePlanIds(plan, ctx)).toThrow(/not after/);
+  });
+
+  it("allows clearing the times back to all day", () => {
+    const plan = makePlan([{ type: "update_task", taskId: "t4", clearTimes: true }]);
+    expect(() => validatePlanIds(plan, ctx)).not.toThrow();
+  });
+
+  it("allows an ordinary window", () => {
+    const plan = makePlan([
+      {
+        type: "create_task",
+        projectId: "p1",
+        name: "Pour",
+        startDate: MON,
+        startTime: "06:00",
+        endTime: "10:30",
+      },
     ]);
     expect(() => validatePlanIds(plan, ctx)).not.toThrow();
   });
