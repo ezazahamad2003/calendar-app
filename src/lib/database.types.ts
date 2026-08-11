@@ -385,6 +385,7 @@ export type Database = {
         Row: {
           address: string | null
           client_name: string | null
+          color: string | null
           created_at: string
           id: string
           job_number: string | null
@@ -397,6 +398,7 @@ export type Database = {
         Insert: {
           address?: string | null
           client_name?: string | null
+          color?: string | null
           created_at?: string
           id?: string
           job_number?: string | null
@@ -409,6 +411,7 @@ export type Database = {
         Update: {
           address?: string | null
           client_name?: string | null
+          color?: string | null
           created_at?: string
           id?: string
           job_number?: string | null

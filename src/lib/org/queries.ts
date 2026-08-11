@@ -186,7 +186,11 @@ export async function listContacts(orgId: string): Promise<ContactRow[]> {
 export type CalendarTask = Pick<
   TaskRow,
   "id" | "project_id" | "name" | "trade" | "status" | "start_date" | "end_date" | "is_milestone"
-> & { project_name: string };
+> & {
+  project_name: string;
+  /** Explicit color if one was chosen; null means derive from the name. */
+  project_color: string | null;
+};
 
 /** Every scheduled task overlapping [fromIso, toIso], for the calendar grid. */
 export async function tasksOverlapping(
@@ -198,7 +202,7 @@ export async function tasksOverlapping(
   const { data, error } = await supabase
     .from("tasks")
     .select(
-      "id, project_id, name, trade, status, start_date, end_date, is_milestone, projects(name)",
+      "id, project_id, name, trade, status, start_date, end_date, is_milestone, projects(name, color)",
     )
     .eq("org_id", orgId)
     .not("start_date", "is", null)
@@ -209,6 +213,10 @@ export async function tasksOverlapping(
 
   return (data ?? []).map((row) => {
     const { projects, ...task } = row;
-    return { ...task, project_name: projects?.name ?? "" };
+    return {
+      ...task,
+      project_name: projects?.name ?? "",
+      project_color: projects?.color ?? null,
+    };
   });
 }

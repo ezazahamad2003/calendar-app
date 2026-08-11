@@ -13,9 +13,23 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
  *  (a hallucinated id is a hard failure, not a silent skip — SPEC §5). */
 const id = z.string().min(1);
 
+/** #rrggbb, the only color form the projects table accepts. */
+const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/);
+
 export const operationSchema = z.discriminatedUnion("type", [
   z.object({
+    type: z.literal("create_project"),
+    name: z.string().trim().min(1).max(160),
+    clientName: z.string().trim().max(120).nullish(),
+    address: z.string().trim().max(200).nullish(),
+    jobNumber: z.string().trim().max(40).nullish(),
+    startsOn: isoDate.nullish(),
+    /** Only when the user actually asked for one; otherwise the name hash. */
+    color: hexColor.nullish(),
+  }),
+  z.object({
     type: z.literal("create_task"),
+    /** An existing project id, or "$pN" for one created in this same plan. */
     projectId: id,
     name: z.string().trim().min(1).max(160),
     trade: z.string().trim().max(60).nullish(),

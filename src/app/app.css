@@ -9,9 +9,11 @@
 
 /* ── Shell ─────────────────────────────────────────────────────────────── */
 
+/* Navigation, work, assistant. The assistant is a column because what it
+   shows is a column: heard → understood → will do → will send. */
 .shell {
   display: grid;
-  grid-template-columns: 232px 1fr;
+  grid-template-columns: 232px minmax(0, 1fr) 340px;
   min-height: 100vh;
   background: var(--canvas);
 }
@@ -901,100 +903,241 @@
   }
 }
 
-/* ── Voice bar + plan confirmation (Phase 5) ───────────────────────────── */
+/* ── Assistant column + plan diff (Phase 5, moved to the rail in Phase 9) ─ */
 
-.voicebar {
-  position: fixed;
-  bottom: 0;
-  left: 232px;
-  right: 0;
-  z-index: 20;
+.assistant {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  max-height: 100vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+  border-left: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.assistant-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
-  background: var(--paper);
-  border-top: 1px solid var(--line);
-}
-
-.voicebar-form {
-  display: flex;
-  flex: 1;
   gap: 8px;
-  min-width: 0;
 }
 
-.voicebar-input {
-  flex: 1;
-  min-width: 0;
-  min-height: 46px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  font: inherit;
-}
-
-.voicebar-go {
-  min-width: 72px;
-}
-
-/* Thumb-reachable, glove-sized (SPEC §7). */
-.voicebar-mic {
+.assistant-badge {
   flex: none;
-  width: 56px;
-  height: 56px;
-  border: none;
+  padding: 2px 7px;
   border-radius: 999px;
   background: var(--forest);
   color: #fff;
-  font-size: 22px;
-  cursor: pointer;
-  touch-action: none;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
 }
 
-.voicebar-mic--live {
+.assistant-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--forest);
+}
+
+/* Full-width and glove-sized: this is the primary control of the product,
+   and it is pressed with a work glove on (SPEC §7). */
+.assistant-mic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 56px;
+  border: none;
+  border-radius: 12px;
+  background: var(--forest);
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.assistant-mic:hover:not(:disabled) {
+  background: var(--forest-2);
+}
+
+.assistant-mic:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.assistant-mic--live {
   background: var(--clay);
 }
 
-.voicebar-mic:focus-visible,
-.voicebar-input:focus-visible {
+.assistant-mic-glyph {
+  font-size: 20px;
+}
+
+.assistant-mic:focus-visible,
+.assistant-input:focus-visible {
   outline: 2px solid var(--sage);
   outline-offset: 2px;
 }
 
-.voicebar-status {
-  flex-basis: 100%;
-  order: 3;
-  min-height: 18px;
-  font-size: 12px;
+.assistant-meter {
+  height: 6px;
+  border-radius: 999px;
+  background: #e8e6de;
+  overflow: hidden;
+}
+
+.assistant-meter-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--clay);
+  transform-origin: left center;
+  transform: scaleX(0.03);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .assistant-meter-fill {
+    transition: transform 70ms linear;
+  }
+}
+
+.assistant-hint,
+.assistant-label {
+  margin: 0;
+  font-size: 11px;
   color: var(--muted);
 }
 
-.voicebar-error {
-  color: #6d2718;
+.assistant-label {
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
-.plan-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
+.assistant-steps {
   display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  background: rgb(23 35 34 / 0.45);
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.plan-sheet {
-  width: 100%;
-  max-width: 560px;
-  max-height: 82vh;
-  overflow-y: auto;
-  padding: 22px 20px calc(22px + env(safe-area-inset-bottom));
-  border-radius: 16px 16px 0 0;
-  background: var(--paper);
+.assistant-step {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #f0efe9;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
 }
 
-/* Readable at arm's length in sunlight (SPEC §5). */
+.assistant-step--done {
+  background: #e4ece6;
+  color: #2c6149;
+}
+
+.assistant-step--now {
+  background: var(--forest);
+  color: #fff;
+}
+
+.assistant-caption {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f6f5f0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.assistant-caption--waiting {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.assistant-heard-text {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.assistant-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.assistant-input {
+  min-height: 62px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  resize: vertical;
+}
+
+.assistant-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.assistant-error {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #f0c5b9;
+  border-radius: 10px;
+  background: #fceeea;
+  color: #6d2718;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.assistant-done {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #c9ddd0;
+  border-radius: 10px;
+  background: #eef6f0;
+  color: #1d4433;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.plan {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--canvas);
+}
+
+.plan-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 3px;
+  vertical-align: baseline;
+}
+
+.plan-block--notify {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fbf3e6;
+}
+
 .plan-summary {
   margin: 0 0 12px;
   font-size: 18px;
@@ -1064,14 +1207,31 @@
   margin-top: 16px;
 }
 
-/* Keep page content clear of the fixed bar. */
+/* The assistant is a column now, not a bar pinned over the content, so the
+   page no longer has to reserve a strip at the bottom for it. */
 .page {
-  padding-bottom: 132px;
+  padding-bottom: 40px;
+}
+
+/* Below three columns the assistant goes under the work rather than beside
+   it — full width, no longer sticky, so it scrolls with the page. */
+@media (max-width: 1100px) {
+  .shell {
+    grid-template-columns: 232px minmax(0, 1fr);
+  }
+
+  .assistant {
+    grid-column: 1 / -1;
+    position: static;
+    max-height: none;
+    border-left: none;
+    border-top: 1px solid var(--line);
+  }
 }
 
 @media (max-width: 760px) {
-  .voicebar {
-    left: 0;
+  .shell {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1261,69 +1421,6 @@
   display: inline-flex;
   align-items: center;
   text-decoration: none;
-}
-
-/* Voice bar: label it, and give it a top edge so it reads as a distinct
-   surface rather than page chrome. */
-.voicebar-label {
-  flex-basis: 100%;
-  order: -1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 2px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--muted);
-}
-
-.voicebar-badge {
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: var(--forest);
-  color: #fff;
-  font-size: 10px;
-  letter-spacing: 0.06em;
-}
-
-.voicebar {
-  border-top: 2px solid var(--forest);
-  flex-wrap: wrap;
-}
-
-.voicebar-mic {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-  width: auto;
-  min-width: 92px;
-  height: 52px;
-  padding: 0 14px;
-  border-radius: 12px;
-}
-
-.voicebar-mic-glyph {
-  font-size: 17px;
-  line-height: 1;
-}
-
-.voicebar-mic-text {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-@media (max-width: 520px) {
-  .voicebar-mic-text {
-    display: none;
-  }
-
-  .voicebar-mic {
-    min-width: 56px;
-    padding: 0;
-  }
 }
 
 /* ── Calendar home: day / week / month / year ──────────────────────────── */

@@ -29,6 +29,10 @@ function systemPrompt(ctx: PlannerContext): string {
     "Rules:",
     "- Respond with JSON only, matching the schema described below. No prose.",
     "- Every projectId, taskId, contactId MUST be an id from the CONTEXT. Never invent ids.",
+    "- EXCEPTION — things created in this same plan are referenced by temp id, positional on the operation's index in the operations array: create_project at index 0 is \"$p0\", create_task at index 2 is \"$t2\", create_contact at index 1 is \"$c1\". A later operation may reference an earlier one's temp id; never a later one's.",
+    "- create_project when the user asks to start/make/create/set up a job, project or site that is NOT already in CONTEXT. Then put its tasks in it with create_task using the project's \"$pN\".",
+    "- Only set create_project.color when the user names a colour out loud ('make it blue'). Otherwise leave it null and the app colours it. Valid values are #rrggbb only.",
+    "- An empty CONTEXT projects list is normal for a new account. Do not refuse for lack of a project — create one.",
     "- Fuzzy-match names generously: people, tasks and projects by name, trade or company. Spoken words arrive mangled ('chico' may be a project named Chico Flats).",
     "- If a name could match two different entities, set `clarification` naming both candidates and return operations: [].",
     "- If the request references a person or project not in context, set `clarification` and return operations: [].",
@@ -37,13 +41,14 @@ function systemPrompt(ctx: PlannerContext): string {
     "- 'two weeks' means 10 work days on a 5-day calendar; scale by the working-day count.",
     "- New tasks that must follow an existing task go in create_task.deps.",
     "- send_email is the ONLY way to notify, tell, or update a person. 'Let Tom know' = send_email to Tom (if he has an email) with a body explaining the change. There is no 'notify' operation.",
-    "- The type field must be exactly one of the ten values below. Any other value is invalid.",
+    "- The type field must be exactly one of the eleven values below. Any other value is invalid.",
     "- send_email: write a short, plain, professional body a contractor would send. Sign off with the company name only.",
     "- confidence: 'low' whenever you fuzzy-matched anything important or the transcript was garbled; 'high' only when every reference was unambiguous.",
     "",
     "Plan schema:",
     `{"summary": "one sentence read back to the user",`,
     ` "operations": [`,
+    `  {"type":"create_project","name":"","clientName":null,"address":null,"jobNumber":null,"startsOn":"YYYY-MM-DD or null","color":null},`,
     `  {"type":"create_task","projectId":"","name":"","trade":null,"startDate":"YYYY-MM-DD or null","durationDays":1,"isMilestone":false,"assigneeId":null,"deps":[]},`,
     `  {"type":"move_task","taskId":"","startDate":"YYYY-MM-DD"},`,
     `  {"type":"shift_task","taskId":"","byDays":0},`,
@@ -165,6 +170,10 @@ export async function planFromTranscript(
   const projectIds = new Set(ctx.projects.map((p) => p.id));
   const taskIds = new Set(ctx.tasks.map((t) => t.id));
   const contactIds = new Set(ctx.contacts.map((c) => c.id));
+  // Temp ids for rows created earlier in this same plan. Populated as the loop
+  // walks forward, which is what makes a backward reference legal and a
+  // forward one ("assign to $c3" from index 1) fail — the batch inserts in
+  // order, so a forward reference would resolve to nothing at apply time.
   const tempIds = new Set<string>();
 
   const badId = (kind: string, value: string) =>
@@ -175,10 +184,15 @@ export async function planFromTranscript(
 
   plan.operations.forEach((op, index) => {
     const knownTask = (v: string) => taskIds.has(v) || tempIds.has(v);
+    const knownContact = (v: string) => contactIds.has(v) || tempIds.has(v);
+    const knownProject = (v: string) => projectIds.has(v) || tempIds.has(v);
     switch (op.type) {
+      case "create_project":
+        tempIds.add(`$p${index}`);
+        break;
       case "create_task": {
-        if (!projectIds.has(op.projectId)) throw badId("project", op.projectId);
-        if (op.assigneeId && !contactIds.has(op.assigneeId))
+        if (!knownProject(op.projectId)) throw badId("project", op.projectId);
+        if (op.assigneeId && !knownContact(op.assigneeId))
           throw badId("contact", op.assigneeId);
         for (const d of op.deps) if (!knownTask(d)) throw badId("task", d);
         tempIds.add(`$t${index}`);
@@ -192,20 +206,23 @@ export async function planFromTranscript(
         break;
       case "assign_task":
         if (!knownTask(op.taskId)) throw badId("task", op.taskId);
-        if (!contactIds.has(op.contactId)) throw badId("contact", op.contactId);
+        if (!knownContact(op.contactId)) throw badId("contact", op.contactId);
         break;
       case "add_dependency":
         if (!knownTask(op.predecessorId)) throw badId("task", op.predecessorId);
         if (!knownTask(op.successorId)) throw badId("task", op.successorId);
         break;
       case "shift_project":
+        // A project created in this same plan has nothing to shift.
         if (!projectIds.has(op.projectId)) throw badId("project", op.projectId);
         break;
       case "send_email": {
         for (const c of op.contactIds) {
-          if (!contactIds.has(c)) throw badId("contact", c);
+          if (!knownContact(c)) throw badId("contact", c);
           const contact = ctx.contacts.find((x) => x.id === c);
           // Belt and braces: the prompt forbids this, and the code refuses it.
+          // A contact created in this same plan has no row to check yet, so it
+          // is judged on the address the plan itself supplies.
           if (contact && !contact.hasEmail) {
             throw new PlannerError(
               `${contact.name} has no email address on file. Add one on the ` +
@@ -217,6 +234,7 @@ export async function planFromTranscript(
         break;
       }
       case "create_contact":
+        tempIds.add(`$c${index}`);
         break;
     }
   });

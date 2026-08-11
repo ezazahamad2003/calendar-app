@@ -5,6 +5,9 @@ import { z } from "zod";
 
 import { requireMembership } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
+import { getEnv } from "@/lib/env";
+import { projectColor } from "@/lib/project-color";
+import { dispatchQueued } from "@/lib/outbox/dispatch";
 import { buildPlannerContext } from "./context";
 import { planFromTranscript, PlannerError } from "./planner";
 import { planSchema } from "./schema";
@@ -50,12 +53,20 @@ export type PlanPreview = {
   summary: string;
   clarification: string | null;
   confidence: "high" | "low";
+  newProjects: { name: string; clientName: string | null; color: string }[];
   moves: PreviewMove[];
   statusChanges: { name: string; from: string; to: string }[];
   assignments: { taskName: string; contactName: string }[];
   newDeps: { predecessorName: string; successorName: string; depType: string; lagDays: number }[];
   newContacts: { name: string; company: string | null; trade: string | null }[];
   emails: { recipients: string[]; subject: string; body: string }[];
+  /**
+   * Notifications the app adds on the user's behalf — one per assigned person
+   * per scheduled task. Listed separately from `emails` (which the planner
+   * asked for) so the diff never hides an outbound message behind "assigned
+   * Alex to framing".
+   */
+  notifications: { contactName: string; taskName: string; invite: boolean }[];
   /** Nothing to do — e.g. pure clarification. */
   empty: boolean;
 };
@@ -186,10 +197,95 @@ function assemble(
   };
 }
 
+/**
+ * Who needs telling, and about what.
+ *
+ * SPEC §7 wants a sub to learn about his own dates without the contractor
+ * remembering to say so. Every assignment the plan makes — whether the task is
+ * new or already existed — produces one notification carrying the resolved
+ * dates, which are the cascade's output rather than anything the model said.
+ *
+ * Derived here, once, so the diff the user confirms and the messages that
+ * actually go out cannot describe different things.
+ */
+export type NotifyIntent = {
+  /** Real contact id, or "$cN" for one created in this same plan. */
+  contactRef: string;
+  contactName: string;
+  email: string | null;
+  /** Real task id, or "$tN". */
+  taskRef: string;
+  taskName: string;
+  startDate: string | null;
+  endDate: string | null;
+};
+
+function collectNotifications(
+  plan: Plan,
+  ctx: Awaited<ReturnType<typeof buildPlannerContext>>,
+  asm: Assembled,
+  changes: ReturnType<typeof cascade>,
+): NotifyIntent[] {
+  const changeByTask = new Map(changes.map((c) => [c.taskId, c]));
+  const taskById = new Map(ctx.tasks.map((t) => [t.id, t]));
+  const contactById = new Map(ctx.contacts.map((c) => [c.id, c]));
+
+  const planned = new Map<string, { name: string; email: string | null }>();
+  plan.operations.forEach((op, index) => {
+    if (op.type === "create_contact") {
+      planned.set(`$c${index}`, { name: op.name, email: op.email ?? null });
+    }
+  });
+
+  const pairs: { contactRef: string; taskRef: string; taskName: string }[] = [];
+  plan.operations.forEach((op, index) => {
+    if (op.type === "create_task" && op.assigneeId) {
+      pairs.push({ contactRef: op.assigneeId, taskRef: `$t${index}`, taskName: op.name });
+    }
+    if (op.type === "assign_task") {
+      pairs.push({
+        contactRef: op.contactId,
+        taskRef: op.taskId,
+        taskName: asm.nameOf(op.taskId),
+      });
+    }
+  });
+
+  const seen = new Set<string>();
+  const out: NotifyIntent[] = [];
+
+  for (const pair of pairs) {
+    // One message per person per task, however many ways the plan said it.
+    const key = `${pair.contactRef}::${pair.taskRef}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const existing = contactById.get(pair.contactRef);
+    const fresh = planned.get(pair.contactRef);
+    const resolved = changeByTask.get(pair.taskRef);
+    const current = taskById.get(pair.taskRef);
+
+    out.push({
+      contactRef: pair.contactRef,
+      contactName: existing?.name ?? fresh?.name ?? "someone",
+      // ctx deliberately never carries addresses (context.ts exposes only
+      // hasEmail), so an existing contact's address is fetched at send time.
+      // A planned contact's is whatever the plan supplies.
+      email: existing ? (existing.hasEmail ? "on file" : null) : (fresh?.email ?? null),
+      taskRef: pair.taskRef,
+      taskName: pair.taskName,
+      startDate: resolved?.toStartDate ?? current?.startDate ?? null,
+      endDate: resolved?.toEndDate ?? current?.endDate ?? null,
+    });
+  }
+
+  return out;
+}
+
 function buildPreview(
   plan: Plan,
   ctx: Awaited<ReturnType<typeof buildPlannerContext>>,
-): { preview: PlanPreview; asm: Assembled } {
+): { preview: PlanPreview; asm: Assembled; notify: NotifyIntent[] } {
   const asm = assemble(plan, ctx);
 
   if (asm.cycle) {
@@ -209,14 +305,33 @@ function buildPreview(
   const contactName = new Map(ctx.contacts.map((c) => [c.id, c.name]));
   const taskById = new Map(ctx.tasks.map((t) => [t.id, t]));
 
+  const newProjects: PlanPreview["newProjects"] = [];
   const statusChanges: PlanPreview["statusChanges"] = [];
   const assignments: PlanPreview["assignments"] = [];
   const newDeps: PlanPreview["newDeps"] = [];
   const newContacts: PlanPreview["newContacts"] = [];
   const emails: PlanPreview["emails"] = [];
 
+  // Contacts created in this same plan aren't in ctx yet, so name and address
+  // lookups have to fall back to what the plan itself declares.
+  const plannedContact = new Map<string, { name: string; email: string | null }>();
+  plan.operations.forEach((op, index) => {
+    if (op.type === "create_contact") {
+      plannedContact.set(`$c${index}`, { name: op.name, email: op.email ?? null });
+    }
+  });
+  const nameOfContact = (id: string) =>
+    contactName.get(id) ?? plannedContact.get(id)?.name ?? "someone";
+
   plan.operations.forEach((op, index) => {
     switch (op.type) {
+      case "create_project":
+        newProjects.push({
+          name: op.name,
+          clientName: op.clientName ?? null,
+          color: projectColor(op.name, op.color).fill,
+        });
+        break;
       case "set_status":
         statusChanges.push({
           name: asm.nameOf(op.taskId),
@@ -227,7 +342,7 @@ function buildPreview(
       case "assign_task":
         assignments.push({
           taskName: asm.nameOf(op.taskId),
-          contactName: contactName.get(op.contactId) ?? "someone",
+          contactName: nameOfContact(op.contactId),
         });
         break;
       case "add_dependency":
@@ -242,7 +357,7 @@ function buildPreview(
         if (op.assigneeId) {
           assignments.push({
             taskName: op.name,
-            contactName: contactName.get(op.assigneeId) ?? "someone",
+            contactName: nameOfContact(op.assigneeId),
           });
         }
         for (const d of op.deps) {
@@ -264,7 +379,7 @@ function buildPreview(
         break;
       case "send_email":
         emails.push({
-          recipients: op.contactIds.map((c) => contactName.get(c) ?? "someone"),
+          recipients: op.contactIds.map(nameOfContact),
           subject: op.subject,
           body: op.body,
         });
@@ -284,17 +399,32 @@ function buildPreview(
     isNew: asm.newTaskIds.has(c.taskId),
   }));
 
+  const notify = collectNotifications(plan, ctx, asm, changes);
+  const inviteAttendees = getEnv().FEATURE_INVITE_ATTENDEES;
+
   const preview: PlanPreview = {
     summary: plan.summary,
     clarification: plan.clarification ?? null,
     confidence: plan.confidence,
+    newProjects,
     moves,
     statusChanges,
     assignments,
     newDeps,
     newContacts,
     emails,
+    // Only the reachable ones are shown, because only those become messages.
+    // Someone with no address on file is already visible in `assignments`;
+    // promising them a notification we cannot send would be the lie.
+    notifications: notify
+      .filter((n) => n.email !== null)
+      .map((n) => ({
+        contactName: n.contactName,
+        taskName: n.taskName,
+        invite: inviteAttendees && n.startDate !== null,
+      })),
     empty:
+      newProjects.length === 0 &&
       moves.length === 0 &&
       statusChanges.length === 0 &&
       assignments.length === 0 &&
@@ -303,7 +433,7 @@ function buildPreview(
       emails.length === 0,
   };
 
-  return { preview, asm };
+  return { preview, asm, notify };
 }
 
 // ── planCommand ──────────────────────────────────────────────────────────────
@@ -320,13 +450,10 @@ export async function planCommand(input: { text: string }): Promise<PlanResponse
   }
 
   try {
+    // No guard on an empty project list any more. It used to refuse outright,
+    // which meant a brand-new account's first sentence — the one most likely
+    // to be "start a job called X" — hit a dead end pointing at a form.
     const ctx = await buildPlannerContext(m.orgId, m.timezone);
-    if (ctx.projects.length === 0) {
-      return {
-        ok: false,
-        error: "There are no projects yet. Create one first, then talk to the schedule.",
-      };
-    }
     const plan = await planFromTranscript(parsed.data.text, ctx);
     const { preview } = buildPreview(plan, ctx);
     return { ok: true, plan, preview, transcript: parsed.data.text };
@@ -345,7 +472,17 @@ export async function planCommand(input: { text: string }): Promise<PlanResponse
 // ── applyPlan ────────────────────────────────────────────────────────────────
 
 export type ApplyResponse =
-  | { ok: true; applied: number; summary: string }
+  | {
+      ok: true;
+      applied: number;
+      summary: string;
+      /** Assignment notices that actually went out. */
+      notified: number;
+      /** Notices that failed and are sitting in the outbox to retry. */
+      notifyFailed: number;
+      /** True when no account is connected and the sends were simulated. */
+      notifyMocked: boolean;
+    }
   | { ok: false; error: string };
 
 export async function applyPlan(input: {
@@ -387,22 +524,28 @@ export async function applyPlan(input: {
           };
         }
       }
-      if ("contactId" in op && !contextContactIds.has(op.contactId)) {
+      // "$c"/"$p"/"$t" refs point at rows this same batch creates, so they
+      // cannot be checked against current data — the RPC resolves them.
+      if ("contactId" in op && !op.contactId.startsWith("$") && !contextContactIds.has(op.contactId)) {
         return { ok: false, error: "That person no longer exists. Ask again." };
       }
-      if (op.type === "create_task" && !contextProjectIds.has(op.projectId)) {
+      if (
+        op.type === "create_task" &&
+        !op.projectId.startsWith("$") &&
+        !contextProjectIds.has(op.projectId)
+      ) {
         return { ok: false, error: "That project no longer exists. Ask again." };
       }
       if (op.type === "send_email") {
         for (const c of op.contactIds) {
-          if (!contextContactIds.has(c)) {
+          if (!c.startsWith("$") && !contextContactIds.has(c)) {
             return { ok: false, error: "A recipient no longer exists. Ask again." };
           }
         }
       }
     }
 
-    const { asm } = buildPreview(plan, ctx);
+    const { asm, notify } = buildPreview(plan, ctx);
     const changes = cascade({
       tasks: asm.engineTasks,
       deps: asm.engineDeps,
@@ -420,11 +563,41 @@ export async function applyPlan(input: {
     };
     const ops: WriteOp[] = [];
 
-    // 1. Contacts first (nothing references them by temp id in v1).
-    plan.operations.forEach((op) => {
+    // Ordering is load-bearing from here down: the RPC resolves temp ids from
+    // rows inserted earlier in the same array, so projects and contacts must
+    // precede the tasks that name them, and tasks must precede their
+    // assignments and messages.
+
+    // 1. Projects.
+    plan.operations.forEach((op, index) => {
+      if (op.type !== "create_project") return;
+      ops.push({
+        kind: "insert_project",
+        temp_id: `$p${index}`,
+        data: {
+          name: op.name,
+          job_number: op.jobNumber ?? "",
+          client_name: op.clientName ?? "",
+          address: op.address ?? "",
+          starts_on: op.startsOn ?? "",
+          // Only an explicitly requested color is stored; otherwise NULL and
+          // the name hash decides, the same way trades work.
+          color: op.color ?? "",
+        },
+        log: {
+          entity_type: "project",
+          action: "create",
+          after: { name: op.name, client_name: op.clientName ?? null },
+        },
+      });
+    });
+
+    // 2. Contacts.
+    plan.operations.forEach((op, index) => {
       if (op.type !== "create_contact") return;
       ops.push({
         kind: "insert_contact",
+        temp_id: `$c${index}`,
         data: {
           name: op.name,
           company: op.company ?? "",
@@ -436,7 +609,7 @@ export async function applyPlan(input: {
       });
     });
 
-    // 2. New tasks, with their cascade-resolved dates.
+    // 3. New tasks, with their cascade-resolved dates.
     plan.operations.forEach((op, index) => {
       if (op.type !== "create_task") return;
       const tempId = `$t${index}`;
@@ -485,7 +658,7 @@ export async function applyPlan(input: {
       }
     });
 
-    // 3. Date moves on existing tasks (cascade output), merged with duration
+    // 4. Date moves on existing tasks (cascade output), merged with duration
     //    overrides so a resize lands in the same UPDATE.
     for (const change of changes) {
       if (change.taskId.startsWith("$t")) continue;
@@ -529,7 +702,7 @@ export async function applyPlan(input: {
       });
     }
 
-    // 4. Statuses, assignments, dependencies, emails.
+    // 5. Statuses, assignments, dependencies, emails.
     plan.operations.forEach((op) => {
       switch (op.type) {
         case "set_status":
@@ -602,6 +775,68 @@ export async function applyPlan(input: {
       }
     });
 
+    // 6. Notifications the app adds itself: one email per assigned person, and
+    //    a calendar invite alongside it when the task has dates and
+    //    FEATURE_INVITE_ATTENDEES is on. Written as outbound_messages rows in
+    //    the same transaction as the schedule change, so the record of "we
+    //    told Alex" cannot exist without the change it describes, or vice
+    //    versa. Their keys come back out below to be sent.
+    const notifyKeys: string[] = [];
+    const inviteAttendees = getEnv().FEATURE_INVITE_ATTENDEES;
+
+    for (const n of notify) {
+      if (n.email === null) continue; // no address on file; nothing to send
+
+      const when = n.startDate
+        ? n.endDate && n.endDate !== n.startDate
+          ? `${n.startDate} to ${n.endDate}`
+          : n.startDate
+        : "not yet scheduled";
+
+      const emailKey = crypto.randomUUID();
+      notifyKeys.push(emailKey);
+      ops.push({
+        kind: "insert_message",
+        data: {
+          task_id: n.taskRef,
+          contact_id: n.contactRef,
+          channel: "email",
+          subject: `${n.taskName} — ${when}`,
+          body:
+            `Hi ${n.contactName},\n\n` +
+            `You're scheduled for ${n.taskName}: ${when}.\n\n` +
+            `${m.orgName}`,
+          idempotency_key: emailKey,
+        },
+        log: {
+          entity_type: "outbound_message",
+          action: "queue_assignment_notice",
+          after: { task: n.taskName, to: n.contactName },
+        },
+      });
+
+      if (inviteAttendees && n.startDate) {
+        const inviteKey = crypto.randomUUID();
+        notifyKeys.push(inviteKey);
+        ops.push({
+          kind: "insert_message",
+          data: {
+            task_id: n.taskRef,
+            contact_id: n.contactRef,
+            channel: "calendar",
+            subject: n.taskName,
+            body: `${n.taskName} — ${when}\n\n${m.orgName}`,
+            idempotency_key: inviteKey,
+          },
+          log: {
+            entity_type: "outbound_message",
+            action: "queue_invite",
+            after: { task: n.taskName, to: n.contactName },
+          },
+        });
+      }
+    }
+
     if (ops.length === 0) {
       return { ok: false, error: "Nothing to apply — the plan had no effect." };
     }
@@ -618,13 +853,37 @@ export async function applyPlan(input: {
       return { ok: false, error: `Nothing was changed: ${error.message}` };
     }
 
+    // The schedule is committed. Now tell the people it commits.
+    //
+    // Deliberately after the transaction, not inside it: a Graph or Gmail call
+    // is a network round trip to someone else's server, and holding a database
+    // transaction open across one is how you get lock contention and a
+    // half-applied schedule when it times out. The rows are already durable
+    // and idempotency-keyed, so a failure here leaves a retryable outbox entry
+    // rather than a lost message.
+    //
+    // Planner-authored send_email operations are NOT dispatched here — those
+    // keep going to the outbox for a read-before-send, which is what the
+    // review copy on that page promises. Only the app's own assignment
+    // notices, which the user just confirmed by name in the diff, go out now.
+    const dispatched = notifyKeys.length > 0
+      ? await dispatchQueued(m.orgId, m.userId, notifyKeys)
+      : { sent: 0, failed: 0, mocked: false };
+
     revalidatePath("/", "layout");
     const applied =
       typeof data === "object" && data !== null && "applied" in data
         ? Number((data as { applied: number }).applied)
         : ops.length;
 
-    return { ok: true, applied, summary: plan.summary };
+    return {
+      ok: true,
+      applied,
+      summary: plan.summary,
+      notified: dispatched.sent,
+      notifyFailed: dispatched.failed,
+      notifyMocked: dispatched.mocked,
+    };
   } catch (err) {
     if (err instanceof PlannerError) return { ok: false, error: err.message };
     return {

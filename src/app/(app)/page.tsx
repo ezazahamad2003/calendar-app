@@ -15,6 +15,7 @@ import {
 } from "@/lib/calendar";
 import type { CalView } from "@/lib/calendar";
 import { tradeColor } from "@/lib/trades";
+import { projectColor } from "@/lib/project-color";
 
 /**
  * The calendar is the home screen (SPEC §7 wants the schedule front and
@@ -117,14 +118,28 @@ export default async function CalendarHome({
 
 // ── Views ────────────────────────────────────────────────────────────────────
 
+/**
+ * Two colors, two questions.
+ *
+ * On the calendar the first question is "which job is this?", so the project
+ * owns the fill. The trade keeps its own hue as a stripe down the leading edge
+ * — enough to pick the electricians out of a stacked day without competing
+ * with the job colour. The Gantt stays trade-first, because inside one project
+ * the job is a given and the trade is the whole point.
+ */
 function TaskChip({ task, compact = false }: { task: CalendarTask; compact?: boolean }) {
-  const color = tradeColor(task.trade);
+  const project = projectColor(task.project_name, task.project_color);
+  const trade = tradeColor(task.trade);
   return (
     <Link
       href={`/projects/${task.project_id}`}
       className={compact ? "cal-chip" : "cal-chip cal-chip--roomy"}
-      style={{ background: color.fill, color: color.text }}
-      title={`${task.name} — ${task.project_name}`}
+      style={{
+        background: project.fill,
+        color: project.text,
+        borderLeft: `4px solid ${trade.fill}`,
+      }}
+      title={`${task.name} — ${task.project_name}${task.trade ? ` · ${task.trade}` : ""}`}
     >
       {task.is_milestone ? "◆ " : ""}
       {task.name}
@@ -269,10 +284,16 @@ function YearView({
               ))}
               {weeks.flat().map((day) => {
                 const inMonth = day.slice(0, 7) === month;
-                // Up to three trade colours per day — enough to read density
-                // and trade mix at a glance without becoming mush.
+                // Up to three colours per day — enough to read density and
+                // job mix at a glance without becoming mush. Projects rather
+                // than trades: at a year's zoom "which jobs are running" is
+                // the only question a dot this small can answer.
                 const colors = [
-                  ...new Set(onDay(day).map((t) => tradeColor(t.trade).fill)),
+                  ...new Set(
+                    onDay(day).map(
+                      (t) => projectColor(t.project_name, t.project_color).fill,
+                    ),
+                  ),
                 ].slice(0, 3);
                 return (
                   <Link

@@ -5,8 +5,7 @@ import { z } from "zod";
 
 import { requireMembership } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { providerClientFor } from "@/lib/providers/factory";
-import { ProviderAuthError } from "@/lib/providers/client";
+import { dispatchOne } from "./dispatch";
 
 /**
  * Outbox (SPEC §7): queued and sent messages, editable before send.
@@ -53,90 +52,25 @@ export async function sendMessage(input: {
   const parsed = z.object({ id: z.uuid() }).safeParse(input);
   if (!parsed.success) return { error: "Unknown message." };
 
-  const supabase = await createClient();
-  const { data: msg, error: loadErr } = await supabase
-    .from("outbound_messages")
-    .select("id, status, subject, body, contact_id, channel")
-    .eq("org_id", m.orgId)
-    .eq("id", parsed.data.id)
-    .maybeSingle();
+  // Both channels go through the shared dispatcher — this used to refuse
+  // anything that wasn't email, which meant calendar rows could be queued and
+  // never sent.
+  const result = await dispatchOne(parsed.data.id);
 
-  if (loadErr || !msg) return { error: "That message no longer exists." };
-  // Idempotency: already sent means done, not "send again".
-  if (msg.status === "sent") return {};
-  if (msg.channel !== "email") return { error: "Only email sends from the outbox." };
-  if (!msg.subject || !msg.body) return { error: "Give it a subject and a body first." };
-  if (!msg.contact_id) return { error: "That message has no recipient." };
-
-  const { data: contact } = await supabase
-    .from("contacts")
-    .select("name, email")
-    .eq("org_id", m.orgId)
-    .eq("id", msg.contact_id)
-    .maybeSingle();
-
-  if (!contact?.email) {
-    return {
-      error: `${contact?.name ?? "The recipient"} has no email address. Add one on the Crew page.`,
-    };
-  }
-
-  const { client, mocked } = await providerClientFor(m.orgId, m.userId);
-
-  try {
-    const { messageId } = await client.sendMail({
-      to: [{ address: contact.email, name: contact.name }],
-      subject: msg.subject,
-      body: msg.body,
-    });
-
-    const { error: upErr } = await supabase
-      .from("outbound_messages")
-      .update({
-        status: "sent",
-        sent_at: new Date().toISOString(),
-        ms_message_id: messageId,
-        error: null,
-      })
-      .eq("org_id", m.orgId)
-      .eq("id", msg.id);
-    if (upErr) {
-      return {
-        error:
-          `The email went out but recording it failed: ${upErr.message}. ` +
-          `Do NOT send again — refresh first.`,
-      };
-    }
-
+  if (!result.error) {
+    const supabase = await createClient();
     await supabase.from("change_log").insert({
       org_id: m.orgId,
       actor_user_id: m.userId,
       entity_type: "outbound_message",
-      entity_id: msg.id,
-      action: mocked ? "send_mock" : "send",
-      after: { subject: msg.subject, to: contact.name },
+      entity_id: parsed.data.id,
+      action: result.mocked ? "send_mock" : "send",
       source: "ui",
     });
-
-    revalidatePath("/outbox");
-    return { mocked };
-  } catch (err) {
-    const message =
-      err instanceof ProviderAuthError
-        ? err.message
-        : err instanceof Error
-          ? err.message
-          : "Send failed.";
-
-    await supabase
-      .from("outbound_messages")
-      .update({ status: "failed", error: message })
-      .eq("org_id", m.orgId)
-      .eq("id", msg.id);
-
-    revalidatePath("/outbox");
-    return { error: message };
   }
+
+  revalidatePath("/outbox");
+  return result;
 }
 
 /** Failed → queued again, after the user has seen the error. */

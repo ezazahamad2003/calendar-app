@@ -4,12 +4,15 @@ import { requireMembership } from "@/lib/auth/dal";
 import { listProjectsWithHealth } from "@/lib/org/queries";
 import { signOut } from "@/app/(auth)/actions";
 import { connectionStates, summarize } from "@/lib/providers/factory";
-import { VoiceBar } from "./voice-bar";
+import { VoicePanel } from "./voice-panel";
 
 /**
- * Authenticated shell. Projects and crew live in the left rail (SPEC §7's
- * navigation surface); each page owns its main column. The rail collapses to a
- * top strip under 900px — a phone on a jobsite is the primary device.
+ * Authenticated shell: navigation left, the work in the middle, the assistant
+ * right. Each page owns its main column.
+ *
+ * Three columns collapse to one under 1100px — a phone on a jobsite is the
+ * primary device, and there the assistant sits under the content rather than
+ * beside it.
  */
 export default async function AppLayout({
   children,
@@ -133,8 +136,9 @@ export default async function AppLayout({
           </div>
         ) : null}
         {children}
-        <VoiceBar />
       </div>
+
+      <VoicePanel />
     </div>
   );
 }
