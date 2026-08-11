@@ -40,6 +40,39 @@ export const operationSchema = z.discriminatedUnion("type", [
     /** Predecessor task ids (FS, no lag) — existing ids or "$tN" temp refs. */
     deps: z.array(id).max(8).default([]),
   }),
+  /**
+   * Edits to things that already exist. Separate from the create operations
+   * because the model reached for `create_project` when asked to rename one —
+   * it had no way to say "change this", so it said "make another".
+   *
+   * Every field is optional and only applied when present, so "rename it" does
+   * not quietly blank the client name.
+   */
+  z.object({
+    type: z.literal("update_project"),
+    projectId: id,
+    name: z.string().trim().min(1).max(160).nullish(),
+    clientName: z.string().trim().max(120).nullish(),
+    address: z.string().trim().max(200).nullish(),
+    jobNumber: z.string().trim().max(40).nullish(),
+    status: z.enum(["active", "complete", "on_hold"]).nullish(),
+    color: hexColor.nullish(),
+  }),
+  z.object({
+    type: z.literal("update_task"),
+    taskId: id,
+    name: z.string().trim().min(1).max(160).nullish(),
+    trade: z.string().trim().max(60).nullish(),
+  }),
+  z.object({
+    type: z.literal("update_contact"),
+    contactId: id,
+    name: z.string().trim().min(1).max(120).nullish(),
+    company: z.string().trim().max(120).nullish(),
+    trade: z.string().trim().max(60).nullish(),
+    email: z.string().trim().max(200).nullish(),
+    phone: z.string().trim().max(40).nullish(),
+  }),
   z.object({ type: z.literal("move_task"), taskId: id, startDate: isoDate }),
   z.object({
     type: z.literal("shift_task"),

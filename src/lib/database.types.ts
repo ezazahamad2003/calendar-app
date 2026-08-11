@@ -485,6 +485,8 @@ export type Database = {
       }
       tasks: {
         Row: {
+          calendar_event_id: string | null
+          calendar_provider: Database["public"]["Enums"]["oauth_provider"] | null
           created_at: string
           duration_days: number
           end_date: string | null
@@ -501,6 +503,8 @@ export type Database = {
           trade: string | null
         }
         Insert: {
+          calendar_event_id?: string | null
+          calendar_provider?: Database["public"]["Enums"]["oauth_provider"] | null
           created_at?: string
           duration_days?: number
           end_date?: string | null
@@ -517,6 +521,8 @@ export type Database = {
           trade?: string | null
         }
         Update: {
+          calendar_event_id?: string | null
+          calendar_provider?: Database["public"]["Enums"]["oauth_provider"] | null
           created_at?: string
           duration_days?: number
           end_date?: string | null

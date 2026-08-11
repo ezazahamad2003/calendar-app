@@ -9,6 +9,7 @@ import { getEnv } from "@/lib/env";
 import { projectColor } from "@/lib/project-color";
 import { humanRange } from "@/lib/format-date";
 import { dispatchQueued } from "@/lib/outbox/dispatch";
+import { syncTasksToCalendar } from "@/lib/providers/calendar-sync";
 import { buildPlannerContext } from "./context";
 import { PlannerError } from "./validate";
 import { converse, AgentError } from "./agent";
@@ -60,6 +61,8 @@ export type PlanPreview = {
   notes: string | null;
   confidence: "high" | "low";
   newProjects: { name: string; clientName: string | null; color: string }[];
+  /** Edits to existing rows: what it was, what it becomes. */
+  edits: { what: string; from: string; to: string }[];
   moves: PreviewMove[];
   statusChanges: { name: string; from: string; to: string }[];
   assignments: { taskName: string; contactName: string }[];
@@ -341,6 +344,7 @@ function buildPreview(
   const taskById = new Map(ctx.tasks.map((t) => [t.id, t]));
 
   const newProjects: PlanPreview["newProjects"] = [];
+  const edits: PlanPreview["edits"] = [];
   const statusChanges: PlanPreview["statusChanges"] = [];
   const assignments: PlanPreview["assignments"] = [];
   const newDeps: PlanPreview["newDeps"] = [];
@@ -367,6 +371,62 @@ function buildPreview(
           color: projectColor(op.name, op.color).fill,
         });
         break;
+      case "update_project": {
+        // Shown field by field, with the old value beside the new one. A
+        // rename that reads "Bargaining Real Estate → Barney Real Estate" is
+        // unmistakably a rename; "Barney Real Estate" alone is what made the
+        // last one look like a new job.
+        const before = ctx.projects.find((p) => p.id === op.projectId);
+        const label = before?.name ?? "that job";
+        if (op.name != null) edits.push({ what: "Job name", from: label, to: op.name });
+        if (op.clientName != null)
+          edits.push({
+            what: `${label} client`,
+            from: before?.clientName ?? "—",
+            to: op.clientName,
+          });
+        if (op.jobNumber != null)
+          edits.push({
+            what: `${label} job #`,
+            from: before?.jobNumber ?? "—",
+            to: op.jobNumber,
+          });
+        if (op.status != null)
+          edits.push({ what: `${label} status`, from: "—", to: op.status });
+        if (op.address != null)
+          edits.push({ what: `${label} address`, from: "—", to: op.address });
+        break;
+      }
+      case "update_task": {
+        const before = ctx.tasks.find((t) => t.id === op.taskId);
+        const label = before?.name ?? "that task";
+        if (op.name != null) edits.push({ what: "Task name", from: label, to: op.name });
+        if (op.trade != null)
+          edits.push({ what: `${label} trade`, from: before?.trade ?? "—", to: op.trade });
+        break;
+      }
+      case "update_contact": {
+        const before = ctx.contacts.find((c) => c.id === op.contactId);
+        const label = before?.name ?? "that person";
+        if (op.name != null) edits.push({ what: "Name", from: label, to: op.name });
+        if (op.company != null)
+          edits.push({
+            what: `${label} company`,
+            from: before?.company ?? "—",
+            to: op.company,
+          });
+        if (op.trade != null)
+          edits.push({ what: `${label} trade`, from: before?.trade ?? "—", to: op.trade });
+        if (op.email != null)
+          edits.push({
+            what: `${label} email`,
+            from: before?.hasEmail ? "on file" : "—",
+            to: op.email,
+          });
+        if (op.phone != null)
+          edits.push({ what: `${label} phone`, from: "—", to: op.phone });
+        break;
+      }
       case "set_status":
         statusChanges.push({
           name: asm.nameOf(op.taskId),
@@ -443,6 +503,7 @@ function buildPreview(
     notes: plan.notes ?? null,
     confidence: plan.confidence,
     newProjects,
+    edits,
     moves,
     statusChanges,
     assignments,
@@ -458,10 +519,13 @@ function buildPreview(
         contactName: n.contactName,
         taskName: n.taskName,
         when: humanRange(n.startDate, n.endDate),
+        // They are added to the task's single calendar event rather than sent
+        // an invite of their own.
         invite: inviteAttendees,
       })),
     empty:
       newProjects.length === 0 &&
+      edits.length === 0 &&
       moves.length === 0 &&
       statusChanges.length === 0 &&
       assignments.length === 0 &&
@@ -574,6 +638,11 @@ export type ApplyResponse =
       notifyFailed: number;
       /** True when no account is connected and the sends were simulated. */
       notifyMocked: boolean;
+      /** Calendar events created or updated on the user's own calendar. */
+      calendarWritten: number;
+      calendarFailed: number;
+      /** True when no account is connected, so nothing was pushed. */
+      calendarSkipped: boolean;
     }
   | { ok: false; error: string };
 
@@ -622,7 +691,7 @@ export async function applyPlan(input: {
         return { ok: false, error: "That person no longer exists. Ask again." };
       }
       if (
-        op.type === "create_task" &&
+        (op.type === "create_task" || op.type === "update_project") &&
         !op.projectId.startsWith("$") &&
         !contextProjectIds.has(op.projectId)
       ) {
@@ -794,7 +863,75 @@ export async function applyPlan(input: {
       });
     }
 
-    // 5. Statuses, assignments, dependencies, emails.
+    // 5. Edits to existing rows. Only the fields the operation actually names
+    //    are sent — the RPC applies a column when its key is present, so an
+    //    omitted field is left alone rather than blanked.
+    plan.operations.forEach((op) => {
+      switch (op.type) {
+        case "update_project": {
+          const data: Record<string, unknown> = { id: op.projectId };
+          if (op.name != null) data.name = op.name;
+          if (op.clientName != null) data.client_name = op.clientName;
+          if (op.address != null) data.address = op.address;
+          if (op.jobNumber != null) data.job_number = op.jobNumber;
+          if (op.status != null) data.status = op.status;
+          if (op.color != null) data.color = op.color;
+          if (Object.keys(data).length === 1) break; // nothing but the id
+          ops.push({
+            kind: "update_project",
+            data,
+            log: {
+              entity_type: "project",
+              action: "update",
+              before: { name: ctx.projects.find((p) => p.id === op.projectId)?.name },
+              after: { name: op.name ?? undefined },
+            },
+          });
+          break;
+        }
+        case "update_task": {
+          const data: Record<string, unknown> = { id: op.taskId };
+          if (op.name != null) data.name = op.name;
+          if (op.trade != null) data.trade = op.trade;
+          if (Object.keys(data).length === 1) break;
+          ops.push({
+            kind: "update_task",
+            data,
+            log: {
+              entity_type: "task",
+              action: "update",
+              before: { name: taskById.get(op.taskId)?.name },
+              after: { name: op.name ?? undefined },
+            },
+          });
+          break;
+        }
+        case "update_contact": {
+          const data: Record<string, unknown> = { id: op.contactId };
+          if (op.name != null) data.name = op.name;
+          if (op.company != null) data.company = op.company;
+          if (op.trade != null) data.trade = op.trade;
+          if (op.email != null) data.email = op.email;
+          if (op.phone != null) data.phone = op.phone;
+          if (Object.keys(data).length === 1) break;
+          ops.push({
+            kind: "update_contact",
+            data,
+            log: {
+              entity_type: "contact",
+              action: "update",
+              before: { name: ctx.contacts.find((c) => c.id === op.contactId)?.name },
+              after: { name: op.name ?? undefined },
+            },
+          });
+          break;
+        }
+        default:
+          break;
+      }
+    });
+
+    // 6. Statuses, assignments, dependencies, emails.
     plan.operations.forEach((op) => {
       switch (op.type) {
         case "set_status":
@@ -867,14 +1004,16 @@ export async function applyPlan(input: {
       }
     });
 
-    // 6. Notifications the app adds itself: one email per assigned person, and
-    //    a calendar invite alongside it when the task has dates and
-    //    FEATURE_INVITE_ATTENDEES is on. Written as outbound_messages rows in
-    //    the same transaction as the schedule change, so the record of "we
-    //    told Alex" cannot exist without the change it describes, or vice
-    //    versa. Their keys come back out below to be sent.
+    // 7. Notifications the app adds itself: one email per assigned person, and
+    //    written as an outbound_messages row in the same transaction as the
+    //    schedule change, so the record of "we told Alex" cannot exist without
+    //    the change it describes, or vice versa. Their keys come back out
+    //    below to be sent.
+    //
+    //    The calendar half is no longer queued here — see syncTasksToCalendar
+    //    after the commit, which puts the task on the user's own calendar once
+    //    and adds assignees to that one event.
     const notifyKeys: string[] = [];
-    const inviteAttendees = getEnv().FEATURE_INVITE_ATTENDEES;
 
     for (const n of notify) {
       if (n.email === null) continue; // no address on file; nothing to send
@@ -903,26 +1042,10 @@ export async function applyPlan(input: {
         },
       });
 
-      if (inviteAttendees && n.startDate) {
-        const inviteKey = crypto.randomUUID();
-        notifyKeys.push(inviteKey);
-        ops.push({
-          kind: "insert_message",
-          data: {
-            task_id: n.taskRef,
-            contact_id: n.contactRef,
-            channel: "calendar",
-            subject: n.taskName,
-            body: `${n.taskName} — ${when}\n\n${m.orgName}`,
-            idempotency_key: inviteKey,
-          },
-          log: {
-            entity_type: "outbound_message",
-            action: "queue_invite",
-            after: { task: n.taskName, to: n.contactName },
-          },
-        });
-      }
+      // No separate calendar row per person any more. The task gets ONE
+      // calendar event (see syncTasksToCalendar below) and assignees ride on
+      // it as attendees — two people on a task used to mean two events for the
+      // same day's work.
     }
 
     if (ops.length === 0) {
@@ -958,6 +1081,27 @@ export async function applyPlan(input: {
       ? await dispatchQueued(m.orgId, m.userId, notifyKeys)
       : { sent: 0, failed: 0, mocked: false };
 
+    // Push every task this plan touched onto the user's own calendar. Not just
+    // the assigned ones: the schedule belongs on the calendar the contractor
+    // actually looks at, whether or not anyone else is on it.
+    //
+    // Ids come from two places — the RPC's temp-id map for tasks created here,
+    // and the cascade for ones that already existed and moved.
+    // The map is keyed by temp id and holds projects and contacts too, so it
+    // is filtered to "$t" rather than taken wholesale.
+    const tempIdMap = (
+      typeof data === "object" && data !== null && "task_ids" in data
+        ? ((data as { task_ids: Record<string, string> }).task_ids ?? {})
+        : {}
+    ) as Record<string, string>;
+    const createdTaskIds = Object.entries(tempIdMap)
+      .filter(([tempId]) => tempId.startsWith("$t"))
+      .map(([, realId]) => realId);
+    const movedTaskIds = changes.map((c) => c.taskId).filter((id) => !id.startsWith("$"));
+    const touched = [...new Set([...createdTaskIds, ...movedTaskIds])];
+
+    const synced = await syncTasksToCalendar(m.orgId, m.userId, touched);
+
     revalidatePath("/", "layout");
     const applied =
       typeof data === "object" && data !== null && "applied" in data
@@ -971,6 +1115,9 @@ export async function applyPlan(input: {
       notified: dispatched.sent,
       notifyFailed: dispatched.failed,
       notifyMocked: dispatched.mocked,
+      calendarWritten: synced.created + synced.updated,
+      calendarFailed: synced.failed,
+      calendarSkipped: synced.skipped,
     };
   } catch (err) {
     if (err instanceof PlannerError) return { ok: false, error: err.message };

@@ -61,6 +61,13 @@ export function validatePlanIds(plan: Plan, ctx: PlannerContext): Plan {
         tempIds.add(`$t${index}`);
         break;
       }
+      case "update_project":
+        if (!knownProject(op.projectId)) throw badId("project", op.projectId);
+        break;
+      case "update_contact":
+        if (!knownContact(op.contactId)) throw badId("contact", op.contactId);
+        break;
+      case "update_task":
       case "move_task":
       case "shift_task":
       case "resize_task":

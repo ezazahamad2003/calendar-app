@@ -1177,6 +1177,28 @@
   color: #2c6149;
 }
 
+.plan-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #e6e4dc;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.plan-tag--new {
+  background: #dce9df;
+  color: #2c6149;
+}
+
+.plan-was {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
 .plan-swatch {
   display: inline-block;
   width: 10px;

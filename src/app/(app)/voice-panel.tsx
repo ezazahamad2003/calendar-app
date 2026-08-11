@@ -178,6 +178,12 @@ export function VoicePanel() {
         );
       }
       if (result.notifyFailed > 0) notes.push(`${result.notifyFailed} failed — see Outbox`);
+      if (result.calendarWritten > 0) {
+        notes.push(`${result.calendarWritten} on your calendar`);
+      }
+      if (result.calendarFailed > 0) {
+        notes.push(`${result.calendarFailed} calendar write${result.calendarFailed === 1 ? "" : "s"} failed`);
+      }
       const settled = notes.length > 0 ? `Done · ${notes.join(", ")}` : "Done";
 
       setMessages((m) =>
@@ -389,21 +395,43 @@ function PlanReview({
         </div>
       ) : null}
 
+      {/* Before beside after. "Barney Real Estate" on its own under a NEW JOB
+          heading is what let a duplicate look like a rename. */}
+      {p.edits.length > 0 ? (
+        <div className="plan-block">
+          <p className="assistant-label">Changes</p>
+          {p.edits.map((e, i) => (
+            <p key={i} className="plan-line">
+              {e.what}: <span className="plan-was">{e.from}</span> →{" "}
+              <strong>{e.to}</strong>
+            </p>
+          ))}
+        </div>
+      ) : null}
+
       {p.moves.length > 0 ? (
         <div className="plan-block">
           <p className="assistant-label">Schedule</p>
+          {/* "New" and "Moved" are spelled out. The old line was two ISO dates
+              with an arrow between them, which reads as a date range just as
+              easily as a move — and a move you didn't ask for is the one thing
+              you most need to catch here. */}
           {p.moves.map((mv, i) => (
             <p key={i} className={`plan-move${mv.direct ? "" : " plan-move--cascade"}`}>
               {mv.direct ? "" : "↳ "}
               <strong>{mv.name}</strong>{" "}
               {mv.isNew ? (
                 <>
-                  new · {mv.toStart} → {mv.toEnd}
+                  <span className="plan-tag plan-tag--new">New</span>{" "}
+                  {mv.toStart === mv.toEnd ? mv.toStart : `${mv.toStart} – ${mv.toEnd}`}
                 </>
               ) : (
                 <>
-                  {mv.fromStart ?? "unscheduled"} → {mv.toStart}
-                  {mv.direct ? "" : " (cascaded)"}
+                  <span className="plan-tag">
+                    {mv.direct ? "Moved" : "Knock-on"}
+                  </span>{" "}
+                  <span className="plan-was">{mv.fromStart ?? "unscheduled"}</span> →{" "}
+                  {mv.toStart}
                 </>
               )}
             </p>
