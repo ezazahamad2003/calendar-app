@@ -113,6 +113,25 @@ const serverSchema = z.object({
     .min(1)
     .default("offline_access User.Read Mail.Send Calendars.ReadWrite"),
 
+  // ── Google (Gmail + Calendar, Phase 8) ────────────────────────────────────
+  // Peer of the Microsoft block above, same optional-but-validated treatment:
+  // an org that only uses Outlook leaves these unset and never sees Google in
+  // the UI, and vice versa.
+  GOOGLE_CLIENT_ID: optionalString(),
+  GOOGLE_CLIENT_SECRET: optionalString(),
+  GOOGLE_REDIRECT_URI: optionalString().pipe(z.url().optional()),
+  // `openid email` identifies the connected account; gmail.send and
+  // calendar.events are the narrowest scopes that still let us send mail and
+  // write events. Deliberately not gmail.readonly or calendar (full) — those
+  // are *restricted* scopes and drag in Google's security-assessment review.
+  GOOGLE_SCOPES: z
+    .string()
+    .trim()
+    .min(1)
+    .default(
+      "openid email https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/calendar.events",
+    ),
+
   // ── Feature flags ─────────────────────────────────────────────────────────
   FEATURE_CONFIRM_BEFORE_SEND: boolFlag(true),
   FEATURE_INVITE_ATTENDEES: boolFlag(true),

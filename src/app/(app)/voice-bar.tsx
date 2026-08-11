@@ -63,17 +63,33 @@ export function VoiceBar() {
         form.append("audio", blob);
         try {
           const res = await fetch("/api/voice/transcribe", { method: "POST", body: form });
-          const payload = (await res.json()) as { text?: string; error?: string };
+
+          // A server error can return an HTML page rather than JSON, and
+          // res.json() throws on it. Parsing defensively keeps that from
+          // surfacing as "no connection", which sends people to check their
+          // signal when the real problem is on the server.
+          const raw = await res.text();
+          let payload: { text?: string; error?: string } = {};
+          try {
+            payload = JSON.parse(raw) as { text?: string; error?: string };
+          } catch {
+            payload = {};
+          }
+
           if (!res.ok || !payload.text) {
             setStage({
               kind: "error",
-              message: payload.error ?? "Transcription failed. Try again.",
+              message:
+                payload.error ??
+                `Transcription failed (server said ${res.status}). ` +
+                  `If this keeps happening, the OpenAI key may be missing.`,
             });
             return;
           }
           setText(payload.text);
           submitText(payload.text);
         } catch {
+          // Only a genuine network failure reaches here now.
           setStage({ kind: "error", message: "No connection. Try again when you have signal." });
         }
       };

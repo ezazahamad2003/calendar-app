@@ -1,6 +1,8 @@
+import Link from "next/link";
+
 import { requireMembership } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { msConnectionState } from "@/lib/graph/factory";
+import { connectionStates, summarize } from "@/lib/providers/factory";
 import { OutboxList } from "./outbox-list";
 import type { OutboxMessage } from "./outbox-list";
 
@@ -9,7 +11,7 @@ export default async function OutboxPage() {
   const m = await requireMembership();
   const supabase = await createClient();
 
-  const [{ data: rows }, connection] = await Promise.all([
+  const [{ data: rows }, states] = await Promise.all([
     supabase
       .from("outbound_messages")
       .select(
@@ -18,8 +20,9 @@ export default async function OutboxPage() {
       .eq("org_id", m.orgId)
       .order("created_at", { ascending: false })
       .limit(100),
-    msConnectionState(m.orgId, m.userId),
+    connectionStates(m.orgId, m.userId),
   ]);
+  const connections = summarize(states);
 
   const messages: OutboxMessage[] = (rows ?? []).map((r) => ({
     id: r.id,
@@ -43,21 +46,24 @@ export default async function OutboxPage() {
         </div>
       </header>
 
-      {!connection.available ? (
+      {!connections.anyAvailable ? (
         <p className="outbox-mode">
-          Outlook isn&rsquo;t set up in this environment, so sends are{" "}
+          No email account is set up in this environment, so sends are{" "}
           <strong>simulated</strong> — messages get marked sent without leaving
           the app.
         </p>
-      ) : !connection.connected ? (
+      ) : !connections.active ? (
         <p className="outbox-mode">
-          Outlook isn&rsquo;t connected, so sends are <strong>simulated</strong> —
-          messages get marked sent without leaving the app.{" "}
-          <a href="/api/microsoft/connect">Connect Outlook</a> to send for real.
+          No email account is connected, so sends are <strong>simulated</strong>{" "}
+          — messages get marked sent without leaving the app.{" "}
+          <Link href="/connections">Connect Outlook or Gmail</Link> to send for
+          real.
         </p>
       ) : (
         <p className="outbox-mode">
-          Sending as <strong>{connection.email ?? "your Outlook account"}</strong>.
+          Sending via {connections.active.label} as{" "}
+          <strong>{connections.active.email ?? "your connected account"}</strong>.{" "}
+          <Link href="/connections">Change</Link>
         </p>
       )}
 

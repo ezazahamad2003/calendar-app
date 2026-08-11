@@ -13,7 +13,7 @@ beforeAll(() => {
 
 describe("refresh-token encryption", () => {
   it("round-trips a token", async () => {
-    const { encryptToken, decryptToken } = await import("@/lib/graph/crypto");
+    const { encryptToken, decryptToken } = await import("@/lib/providers/crypto");
     const token = "0.AXEAsecret-refresh-token-payload~xyz";
     const stored = encryptToken(token);
     expect(stored).not.toContain(token);
@@ -22,12 +22,12 @@ describe("refresh-token encryption", () => {
   });
 
   it("produces a different ciphertext every time (fresh IV)", async () => {
-    const { encryptToken } = await import("@/lib/graph/crypto");
+    const { encryptToken } = await import("@/lib/providers/crypto");
     expect(encryptToken("same")).not.toBe(encryptToken("same"));
   });
 
   it("rejects tampered ciphertext", async () => {
-    const { encryptToken, decryptToken } = await import("@/lib/graph/crypto");
+    const { encryptToken, decryptToken } = await import("@/lib/providers/crypto");
     const stored = encryptToken("payload");
     const raw = Buffer.from(stored.slice(3), "base64");
     raw[raw.length - 1] ^= 0xff;
@@ -35,7 +35,7 @@ describe("refresh-token encryption", () => {
   });
 
   it("rejects an unversioned blob", async () => {
-    const { decryptToken } = await import("@/lib/graph/crypto");
+    const { decryptToken } = await import("@/lib/providers/crypto");
     expect(() => decryptToken("bm90LXZlcnNpb25lZA==")).toThrow(/format/i);
   });
 });

@@ -5,8 +5,8 @@ import { z } from "zod";
 
 import { requireMembership } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
-import { graphClientFor } from "@/lib/graph/factory";
-import { GraphAuthError } from "@/lib/graph/client";
+import { providerClientFor } from "@/lib/providers/factory";
+import { ProviderAuthError } from "@/lib/providers/client";
 
 /**
  * Outbox (SPEC §7): queued and sent messages, editable before send.
@@ -81,7 +81,7 @@ export async function sendMessage(input: {
     };
   }
 
-  const { client, mocked } = await graphClientFor(m.orgId, m.userId);
+  const { client, mocked } = await providerClientFor(m.orgId, m.userId);
 
   try {
     const { messageId } = await client.sendMail({
@@ -122,7 +122,7 @@ export async function sendMessage(input: {
     return { mocked };
   } catch (err) {
     const message =
-      err instanceof GraphAuthError
+      err instanceof ProviderAuthError
         ? err.message
         : err instanceof Error
           ? err.message

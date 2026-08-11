@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { requireMembership } from "@/lib/auth/dal";
-import { ProjectFields } from "../../new-project-form";
+import { ProjectFields } from "./project-fields";
 
 export const metadata: Metadata = { title: "New project | Foreman" };
 

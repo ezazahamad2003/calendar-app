@@ -231,46 +231,52 @@ export type Database = {
           },
         ]
       }
-      ms_connections: {
+      provider_connections: {
         Row: {
           connected_at: string
           email: string | null
           id: string
+          is_primary: boolean
           last_refreshed_at: string | null
-          ms_user_id: string | null
           org_id: string
+          provider: Database["public"]["Enums"]["oauth_provider"]
+          provider_user_id: string | null
           refresh_token_encrypted: string | null
           scopes: string[]
-          status: Database["public"]["Enums"]["ms_connection_status"]
+          status: Database["public"]["Enums"]["connection_status"]
           user_id: string
         }
         Insert: {
           connected_at?: string
           email?: string | null
           id?: string
+          is_primary?: boolean
           last_refreshed_at?: string | null
-          ms_user_id?: string | null
           org_id: string
+          provider: Database["public"]["Enums"]["oauth_provider"]
+          provider_user_id?: string | null
           refresh_token_encrypted?: string | null
           scopes?: string[]
-          status?: Database["public"]["Enums"]["ms_connection_status"]
+          status?: Database["public"]["Enums"]["connection_status"]
           user_id: string
         }
         Update: {
           connected_at?: string
           email?: string | null
           id?: string
+          is_primary?: boolean
           last_refreshed_at?: string | null
-          ms_user_id?: string | null
           org_id?: string
+          provider?: Database["public"]["Enums"]["oauth_provider"]
+          provider_user_id?: string | null
           refresh_token_encrypted?: string | null
           scopes?: string[]
-          status?: Database["public"]["Enums"]["ms_connection_status"]
+          status?: Database["public"]["Enums"]["connection_status"]
           user_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "ms_connections_org_id_fkey"
+            foreignKeyName: "provider_connections_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "orgs"
@@ -606,10 +612,11 @@ export type Database = {
     }
     Enums: {
       change_source: "voice" | "ui" | "system"
+      connection_status: "active" | "needs_reauth"
       dep_type: "FS" | "SS" | "FF" | "SF"
       message_channel: "email" | "calendar"
       message_status: "draft" | "queued" | "sent" | "failed"
-      ms_connection_status: "active" | "needs_reauth"
+      oauth_provider: "microsoft" | "google"
       org_role: "owner" | "admin" | "member"
       project_status: "active" | "complete" | "on_hold"
       task_status: "planned" | "active" | "blocked" | "done"
@@ -741,10 +748,11 @@ export const Constants = {
   public: {
     Enums: {
       change_source: ["voice", "ui", "system"],
+      connection_status: ["active", "needs_reauth"],
       dep_type: ["FS", "SS", "FF", "SF"],
       message_channel: ["email", "calendar"],
       message_status: ["draft", "queued", "sent", "failed"],
-      ms_connection_status: ["active", "needs_reauth"],
+      oauth_provider: ["microsoft", "google"],
       org_role: ["owner", "admin", "member"],
       project_status: ["active", "complete", "on_hold"],
       task_status: ["planned", "active", "blocked", "done"],

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requireMembership } from "@/lib/auth/dal";
 import { listProjectsWithHealth } from "@/lib/org/queries";
 import { signOut } from "@/app/(auth)/actions";
-import { msConnectionState } from "@/lib/graph/factory";
+import { connectionStates, summarize } from "@/lib/providers/factory";
 import { VoiceBar } from "./voice-bar";
 
 /**
@@ -17,10 +17,11 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const membership = await requireMembership();
-  const [projects, msState] = await Promise.all([
+  const [projects, states] = await Promise.all([
     listProjectsWithHealth(membership.orgId, membership.timezone),
-    msConnectionState(membership.orgId, membership.userId),
+    connectionStates(membership.orgId, membership.userId),
   ]);
+  const connections = summarize(states);
 
   return (
     <div className="shell">
@@ -31,11 +32,13 @@ export default async function AppLayout({
         </div>
 
         <nav className="rail-nav" aria-label="Main">
+          {/* Calendar is home — the schedule is the product, and "Today" was a
+              wrapper around content that belongs on these pages. */}
           <Link className="rail-link" href="/">
-            Today
-          </Link>
-          <Link className="rail-link" href="/calendar">
             Calendar
+          </Link>
+          <Link className="rail-link" href="/projects">
+            Projects
           </Link>
           <Link className="rail-link" href="/crew">
             Crew
@@ -43,34 +46,39 @@ export default async function AppLayout({
           <Link className="rail-link" href="/outbox">
             Outbox
           </Link>
+          <Link className="rail-link" href="/connections">
+            Connections
+          </Link>
         </nav>
 
-        {/* Hidden entirely when the integration isn't configured — offering a
-            button that cannot work is worse than offering nothing. */}
-        {msState.available ? (
+        {/* Hidden entirely when neither provider is configured — offering a
+            button that cannot work is worse than offering nothing. Which
+            accounts to connect is the user's call, so the rail only reports
+            the state and sends them to the page where they choose. */}
+        {connections.anyAvailable ? (
           <div className="rail-ms">
-            {msState.connected ? (
-              <p className="rail-ms-ok" title={msState.email ?? undefined}>
-                ✓ Outlook connected
-              </p>
+            {connections.active ? (
+              <Link
+                className="rail-ms-ok"
+                href="/connections"
+                title={connections.active.email ?? undefined}
+              >
+                ✓ Sending via {connections.active.label}
+              </Link>
             ) : (
-              <a className="rail-ms-connect" href="/api/microsoft/connect">
-                Connect Outlook
-              </a>
+              <Link className="rail-ms-connect" href="/connections">
+                Connect email
+              </Link>
             )}
           </div>
         ) : null}
 
         <div className="rail-section">
           <div className="rail-section-head">
-            <p className="rail-heading">Projects</p>
-            {/* The empty state below already offers this; two adjacent add
-                links in a narrow rail is noise. */}
-            {projects.length > 0 ? (
-              <Link className="rail-add" href="/projects/new" aria-label="Add a project">
-                + New
-              </Link>
-            ) : null}
+            <p className="rail-heading">Jobs</p>
+            <Link className="rail-add" href="/projects/new" aria-label="Add a project">
+              + New
+            </Link>
           </div>
           {projects.length === 0 ? (
             <Link className="rail-empty-add" href="/projects/new">
@@ -102,11 +110,26 @@ export default async function AppLayout({
       </aside>
 
       <div className="shell-main">
-        {msState.needsReauth ? (
+        {/* Only alarming when nothing else can send. With a second account
+            still connected, a dead grant is a note, not an outage. */}
+        {connections.stale.length > 0 ? (
           <div className="reauth-banner" role="alert">
-            Outlook lost its connection — mail and calendar invites are paused
-            until you <a href="/api/microsoft/connect">reconnect</a>. Nothing
-            queued has been lost.
+            {connections.stale.map((s) => s.label).join(" and ")} lost{" "}
+            {connections.stale.length > 1 ? "their connections" : "its connection"}
+            {connections.active ? (
+              <>
+                {" "}
+                — sending continues through {connections.active.label}.{" "}
+                <Link href="/connections">Reconnect</Link> to switch back.
+              </>
+            ) : (
+              <>
+                {" "}
+                — mail and calendar invites are paused until you{" "}
+                <Link href="/connections">reconnect</Link>. Nothing queued has
+                been lost.
+              </>
+            )}
           </div>
         ) : null}
         {children}

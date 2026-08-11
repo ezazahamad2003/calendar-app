@@ -9,7 +9,7 @@ import type { Database } from "../../src/lib/database.types";
 import { localStack } from "./local-stack";
 
 /**
- * Phase 1 gate (SPEC §9): org A cannot read org B, and `ms_connections` is
+ * Phase 1 gate (SPEC §9): org A cannot read org B, and `provider_connections` is
  * unreadable from the client role.
  *
  * These tests are deliberately adversarial. A tenancy test that only proves the
@@ -131,18 +131,19 @@ async function seedOrg(label: string): Promise<OrgFixture> {
   // ciphertext (SPEC §3).
   unwrap(
     await admin
-      .from("ms_connections")
+      .from("provider_connections")
       .insert({
         org_id: org.id,
         user_id: userId,
-        ms_user_id: `ms-${label}-${runId}`,
+        provider: "microsoft",
+        provider_user_id: `ms-${label}-${runId}`,
         email,
         refresh_token_encrypted: `ciphertext-for-${label}-${runId}`,
         scopes: ["Mail.Send", "Calendars.ReadWrite"],
       })
       .select("id")
       .single(),
-    `create ms_connection ${label}`,
+    `create provider_connection ${label}`,
   );
 
   unwrap(
@@ -315,17 +316,17 @@ describe("tenant isolation — org A cannot reach org B", () => {
   });
 });
 
-describe("ms_connections is invisible to the client role", () => {
+describe("provider_connections is invisible to the client role", () => {
   it("has rows that the service role can see", async () => {
     const rows = unwrap(
-      await admin.from("ms_connections").select("id, refresh_token_encrypted"),
-      "admin read ms_connections",
+      await admin.from("provider_connections").select("id, refresh_token_encrypted"),
+      "admin read provider_connections",
     );
     expect(rows.length).toBeGreaterThanOrEqual(2);
   });
 
   it("returns nothing to a signed-in member of the owning org", async () => {
-    const { data, error } = await orgA.client.from("ms_connections").select("*");
+    const { data, error } = await orgA.client.from("provider_connections").select("*");
 
     // RLS is enabled with no policies AND the grants are revoked, so this is
     // either a permission error or an empty set. Never a token.
@@ -335,12 +336,12 @@ describe("ms_connections is invisible to the client role", () => {
 
   it("refuses a targeted read of a known connection id", async () => {
     const known = unwrap(
-      await admin.from("ms_connections").select("id").eq("org_id", orgA.orgId).single(),
+      await admin.from("provider_connections").select("id").eq("org_id", orgA.orgId).single(),
       "admin read org A connection",
     );
 
     const { data } = await orgA.client
-      .from("ms_connections")
+      .from("provider_connections")
       .select("refresh_token_encrypted")
       .eq("id", known.id);
 
@@ -349,7 +350,7 @@ describe("ms_connections is invisible to the client role", () => {
 
   it("refuses a client-side write", async () => {
     const { error } = await orgA.client
-      .from("ms_connections")
+      .from("provider_connections")
       .update({ status: "needs_reauth" })
       .eq("org_id", orgA.orgId);
 

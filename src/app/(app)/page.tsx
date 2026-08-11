@@ -1,175 +1,303 @@
 import Link from "next/link";
 
 import { requireMembership } from "@/lib/auth/dal";
-import { listProjectsWithHealth, tasksOverlapping } from "@/lib/org/queries";
-import { seedDemoProject } from "@/lib/org/actions";
+import { tasksOverlapping } from "@/lib/org/queries";
+import type { CalendarTask } from "@/lib/org/queries";
 import { todayInZone } from "@/lib/schedule";
-import { monthGrid } from "@/lib/month";
+import {
+  CAL_VIEWS,
+  calendarRange,
+  monthWeeks,
+  parseAnchor,
+  parseView,
+  weekDays,
+  yearMonths,
+} from "@/lib/calendar";
+import type { CalView } from "@/lib/calendar";
 import { tradeColor } from "@/lib/trades";
-import { NewProjectForm } from "./new-project-form";
 
 /**
- * The morning screen (SPEC §7): every active project with its health line,
- * and this month at a glance on the right.
+ * The calendar is the home screen (SPEC §7 wants the schedule front and
+ * centre). Day / week / month / year, driven entirely by URL params so every
+ * view is linkable and the back button behaves.
+ *
+ * Server-rendered: switching views is a navigation, not client state, which
+ * keeps the whole thing working on a bad jobsite connection.
  */
-export default async function DashboardPage({
+export default async function CalendarHome({
   searchParams,
 }: {
-  searchParams: Promise<{ ms_error?: string; ms_connected?: string }>;
+  searchParams: Promise<{ v?: string; d?: string; ms_error?: string; ms_connected?: string }>;
 }) {
-  // The Microsoft callback can only report back through the URL, so these are
-  // the sole channel for "connected" / "that didn't work". Rendering them here
-  // is what stops an OAuth failure from being silent.
-  const { ms_error: msError, ms_connected: msConnected } = await searchParams;
+  const params = await searchParams;
   const m = await requireMembership();
+
   const today = todayInZone(m.timezone);
-  const grid = monthGrid(today.slice(0, 7));
+  const view: CalView = parseView(params.v);
+  const anchor = parseAnchor(params.d, today);
+  const range = calendarRange(view, anchor);
 
-  const [projects, monthTasks] = await Promise.all([
-    listProjectsWithHealth(m.orgId, m.timezone),
-    tasksOverlapping(m.orgId, grid.firstDay, grid.lastDay),
-  ]);
+  const tasks = await tasksOverlapping(m.orgId, range.from, range.to);
 
-  const busyDays = new Map<string, string[]>();
-  for (const t of monthTasks) {
-    if (!t.start_date || !t.end_date) continue;
-    for (const week of grid.weeks) {
-      for (const day of week) {
-        if (day >= t.start_date && day <= t.end_date) {
-          const list = busyDays.get(day);
-          const fill = tradeColor(t.trade).fill;
-          if (list) {
-            if (!list.includes(fill) && list.length < 3) list.push(fill);
-          } else {
-            busyDays.set(day, [fill]);
-          }
-        }
-      }
-    }
+  /** Tasks active on a given day, in a stable order. */
+  const onDay = (day: string): CalendarTask[] =>
+    tasks
+      .filter((t) => t.start_date && t.end_date && day >= t.start_date && day <= t.end_date)
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+  const href = (v: CalView, d: string) => `/?v=${v}&d=${d}`;
+
+  return (
+    <main className="page">
+      <header className="page-head">
+        <div>
+          <p className="page-eyebrow">{m.orgName}</p>
+          <h1 className="page-title">{range.label}</h1>
+        </div>
+
+        <div className="cal-controls">
+          <nav className="zoom" aria-label="Calendar view">
+            {CAL_VIEWS.map((v) => (
+              <Link
+                key={v}
+                href={href(v, anchor)}
+                className={`zoom-link${view === v ? " zoom-link--on" : ""}`}
+                aria-current={view === v ? "page" : undefined}
+              >
+                {v}
+              </Link>
+            ))}
+          </nav>
+          <nav className="zoom" aria-label="Move through time">
+            <Link className="zoom-link" href={href(view, range.prevAnchor)} aria-label="Previous">
+              ←
+            </Link>
+            <Link className="zoom-link" href={href(view, today)}>
+              today
+            </Link>
+            <Link className="zoom-link" href={href(view, range.nextAnchor)} aria-label="Next">
+              →
+            </Link>
+          </nav>
+        </div>
+      </header>
+
+      {params.ms_error ? (
+        <p className="form-error" role="alert">
+          {params.ms_error}
+        </p>
+      ) : null}
+      {params.ms_connected ? (
+        <p className="auth-notice">
+          Outlook connected. Messages in the outbox now send for real.
+        </p>
+      ) : null}
+
+      {tasks.length === 0 ? (
+        <p className="cal-note">
+          Nothing scheduled in this {view === "day" ? "day" : view}.{" "}
+          <Link href="/projects">Add a project</Link> to start filling it in.
+        </p>
+      ) : null}
+
+      {view === "day" ? <DayView tasks={onDay(anchor)} /> : null}
+
+      {view === "week" ? (
+        <WeekView days={weekDays(anchor)} today={today} onDay={onDay} />
+      ) : null}
+
+      {view === "month" ? (
+        <MonthView anchor={anchor} today={today} onDay={onDay} />
+      ) : null}
+
+      {view === "year" ? <YearView anchor={anchor} today={today} onDay={onDay} /> : null}
+    </main>
+  );
+}
+
+// ── Views ────────────────────────────────────────────────────────────────────
+
+function TaskChip({ task, compact = false }: { task: CalendarTask; compact?: boolean }) {
+  const color = tradeColor(task.trade);
+  return (
+    <Link
+      href={`/projects/${task.project_id}`}
+      className={compact ? "cal-chip" : "cal-chip cal-chip--roomy"}
+      style={{ background: color.fill, color: color.text }}
+      title={`${task.name} — ${task.project_name}`}
+    >
+      {task.is_milestone ? "◆ " : ""}
+      {task.name}
+    </Link>
+  );
+}
+
+function DayView({ tasks }: { tasks: CalendarTask[] }) {
+  if (tasks.length === 0) return null;
+
+  // Grouped by project: on a single day, "which jobs need me" is the question.
+  const byProject = new Map<string, CalendarTask[]>();
+  for (const t of tasks) {
+    const list = byProject.get(t.project_name);
+    if (list) list.push(t);
+    else byProject.set(t.project_name, [t]);
   }
 
   return (
-    <main className="page page--split">
-      <div className="page-col">
-        <header className="page-head">
-          <div>
-            <p className="page-eyebrow">{m.orgName}</p>
-            <h1 className="page-title">Today</h1>
-          </div>
-        </header>
+    <div className="dayview">
+      {[...byProject.entries()].map(([project, list]) => (
+        <section key={project} className="dayview-group">
+          <h2 className="dayview-project">{project}</h2>
+          <ul className="dayview-list">
+            {list.map((t) => (
+              <li key={t.id}>
+                <TaskChip task={t} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  );
+}
 
-        {msError ? (
-          <p className="form-error" role="alert">
-            {msError}
-          </p>
-        ) : null}
-        {msConnected ? (
-          <p className="auth-notice">
-            Outlook connected. Messages in the outbox now send for real.
-          </p>
-        ) : null}
+function WeekView({
+  days,
+  today,
+  onDay,
+}: {
+  days: string[];
+  today: string;
+  onDay: (d: string) => CalendarTask[];
+}) {
+  const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  return (
+    <div className="cal cal--week">
+      {DOW.map((d) => (
+        <span key={d} className="cal-dow">
+          {d}
+        </span>
+      ))}
+      {days.map((day) => (
+        <div
+          key={day}
+          className={`cal-day cal-day--tall${day === today ? " cal-day--today" : ""}`}
+        >
+          <span className="cal-date">{Number(day.slice(8, 10))}</span>
+          {onDay(day).map((t) => (
+            <TaskChip key={`${t.id}-${day}`} task={t} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
 
-        {projects.length === 0 ? (
-          <section className="empty-card">
-            <h2 className="empty-title">No projects yet</h2>
-            <p className="empty-body">
-              Add a job to start scheduling, or seed a realistic demo project to
-              see the Gantt, calendar and cascade working before you enter real
-              data. Once a project exists you can talk to it using the AI bar at
-              the bottom of the screen.
-            </p>
-            <div className="empty-actions">
-              <Link className="btn" href="/projects/new">
-                Add a project
+function MonthView({
+  anchor,
+  today,
+  onDay,
+}: {
+  anchor: string;
+  today: string;
+  onDay: (d: string) => CalendarTask[];
+}) {
+  const weeks = monthWeeks(anchor);
+  const month = anchor.slice(0, 7);
+  return (
+    <div className="cal">
+      {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+        <span key={d} className="cal-dow">
+          {d}
+        </span>
+      ))}
+      {weeks.flat().map((day) => {
+        const list = onDay(day);
+        const shown = list.slice(0, 3);
+        return (
+          <div
+            key={day}
+            className={[
+              "cal-day",
+              day.slice(0, 7) === month ? "" : "cal-day--out",
+              day === today ? "cal-day--today" : "",
+            ].join(" ")}
+          >
+            <span className="cal-date">{Number(day.slice(8, 10))}</span>
+            {shown.map((t) => (
+              <TaskChip key={`${t.id}-${day}`} task={t} compact />
+            ))}
+            {list.length > shown.length ? (
+              <Link className="cal-more" href={`/?v=day&d=${day}`}>
+                +{list.length - shown.length} more
               </Link>
-              <form action={seedDemoProject}>
-                <button className="btn btn--ghost" type="submit">
-                  Seed a demo project
-                </button>
-              </form>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function YearView({
+  anchor,
+  today,
+  onDay,
+}: {
+  anchor: string;
+  today: string;
+  onDay: (d: string) => CalendarTask[];
+}) {
+  return (
+    <div className="yearview">
+      {yearMonths(anchor).map((month) => {
+        const weeks = monthWeeks(`${month}-01`);
+        const label = new Intl.DateTimeFormat("en-US", {
+          month: "long",
+          timeZone: "UTC",
+        }).format(new Date(`${month}-01T00:00:00Z`));
+        return (
+          <section key={month} className="yearview-month">
+            <Link className="yearview-label" href={`/?v=month&d=${month}-01`}>
+              {label}
+            </Link>
+            <div className="yearview-grid">
+              {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
+                <span key={`h${i}`} className="yearview-dow">
+                  {d}
+                </span>
+              ))}
+              {weeks.flat().map((day) => {
+                const inMonth = day.slice(0, 7) === month;
+                // Up to three trade colours per day — enough to read density
+                // and trade mix at a glance without becoming mush.
+                const colors = [
+                  ...new Set(onDay(day).map((t) => tradeColor(t.trade).fill)),
+                ].slice(0, 3);
+                return (
+                  <Link
+                    key={day}
+                    href={`/?v=day&d=${day}`}
+                    className={[
+                      "yearview-day",
+                      inMonth ? "" : "yearview-day--out",
+                      day === today ? "yearview-day--today" : "",
+                    ].join(" ")}
+                    aria-label={day}
+                  >
+                    {Number(day.slice(8, 10))}
+                    <span className="yearview-dots">
+                      {colors.map((fill, i) => (
+                        <i key={i} style={{ background: fill }} />
+                      ))}
+                    </span>
+                  </Link>
+                );
+              })}
             </div>
           </section>
-        ) : (
-          <section className="project-grid" aria-label="Projects">
-            {projects.map(({ project, tasksTotal, tasksActive, tasksBlocked, tasksLate, nextMilestone }) => (
-              <Link key={project.id} href={`/projects/${project.id}`} className="project-card">
-                <div className="project-card-top">
-                  <h2 className="project-card-name">{project.name}</h2>
-                  {project.job_number ? (
-                    <span className="project-card-job">#{project.job_number}</span>
-                  ) : null}
-                </div>
-                {project.client_name ? (
-                  <p className="project-card-client">{project.client_name}</p>
-                ) : null}
-                <p className="project-card-health">
-                  {tasksTotal === 0 ? (
-                    "No tasks scheduled yet"
-                  ) : (
-                    <>
-                      {tasksActive} in flight
-                      {tasksLate > 0 ? (
-                        <span className="health-late"> · {tasksLate} late</span>
-                      ) : null}
-                      {tasksBlocked > 0 ? (
-                        <span className="health-blocked"> · {tasksBlocked} blocked</span>
-                      ) : null}
-                    </>
-                  )}
-                </p>
-                {nextMilestone ? (
-                  <p className="project-card-milestone">
-                    ◆ {nextMilestone.name} · {nextMilestone.date}
-                  </p>
-                ) : null}
-              </Link>
-            ))}
-          </section>
-        )}
-
-        {/* Only offered once projects exist — the empty state above has its own
-            primary call to action, and /projects/new is always in the rail. */}
-        {projects.length > 0 ? <NewProjectForm /> : null}
-      </div>
-
-      <aside className="page-rail" aria-label="This month">
-        <div className="minical">
-          <div className="minical-head">
-            <span>{grid.label}</span>
-            <Link className="minical-more" href="/calendar">
-              Full calendar
-            </Link>
-          </div>
-          <div className="minical-grid">
-            {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
-              <span key={`h${i}`} className="minical-dow">
-                {d}
-              </span>
-            ))}
-            {grid.weeks.flat().map((day) => {
-              const inMonth = day.slice(0, 7) === grid.month;
-              const dots = busyDays.get(day) ?? [];
-              return (
-                <span
-                  key={day}
-                  className={[
-                    "minical-day",
-                    inMonth ? "" : "minical-day--out",
-                    day === today ? "minical-day--today" : "",
-                  ].join(" ")}
-                >
-                  {Number(day.slice(8, 10))}
-                  <span className="minical-dots">
-                    {dots.map((fill, i) => (
-                      <i key={i} style={{ background: fill }} />
-                    ))}
-                  </span>
-                </span>
-              );
-            })}
-          </div>
-        </div>
-      </aside>
-    </main>
+        );
+      })}
+    </div>
   );
 }

@@ -1082,9 +1082,15 @@
 }
 
 .rail-ms-ok {
+  display: block;
   margin: 0;
   font-size: 12px;
   color: #9db4ac;
+  text-decoration: none;
+}
+
+.rail-ms-ok:hover {
+  color: #e8ede9;
 }
 
 .rail-ms-connect {
@@ -1318,4 +1324,281 @@
     min-width: 56px;
     padding: 0;
   }
+}
+
+/* ── Calendar home: day / week / month / year ──────────────────────────── */
+
+.cal-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cal-note {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.cal-chip--roomy {
+  padding: 8px 10px;
+  font-size: 13px;
+  white-space: normal;
+}
+
+.cal--week .cal-day {
+  min-height: 220px;
+}
+
+.cal-day--tall {
+  min-height: 220px;
+}
+
+/* Day view */
+
+.dayview {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dayview-group {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+}
+
+.dayview-project {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.dayview-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Year view */
+
+.yearview {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 16px;
+}
+
+.yearview-month {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+}
+
+.yearview-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--forest);
+  text-decoration: none;
+}
+
+.yearview-label:hover {
+  text-decoration: underline;
+}
+
+.yearview-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.yearview-dow {
+  font-size: 9px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--muted);
+}
+
+.yearview-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-height: 26px;
+  padding: 2px 0 1px;
+  border-radius: 5px;
+  font-size: 10px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.yearview-day:hover {
+  background: var(--canvas);
+}
+
+.yearview-day--out {
+  color: #c0c4bd;
+}
+
+.yearview-day--today {
+  background: var(--forest);
+  color: #fff;
+  font-weight: 700;
+}
+
+.yearview-dots {
+  display: flex;
+  gap: 1px;
+  min-height: 3px;
+}
+
+.yearview-dots i {
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+}
+
+.yearview-label:focus-visible,
+.yearview-day:focus-visible {
+  outline: 2px solid var(--sage);
+  outline-offset: 1px;
+}
+
+/* Projects page */
+
+.projects-summary {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+@media (max-width: 760px) {
+  .cal--week {
+    grid-template-columns: 1fr;
+  }
+
+  .cal--week .cal-dow {
+    display: none;
+  }
+
+  .cal-day--tall {
+    min-height: 90px;
+  }
+}
+
+/* ── Connections ───────────────────────────────────────────────────────── */
+
+.page-intro {
+  max-width: 62ch;
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.form-ok {
+  margin: 0 0 16px;
+  padding: 8px 10px;
+  border: 1px solid #c9ddd0;
+  border-radius: 8px;
+  background: #eef6f0;
+  color: #1d4433;
+  font-size: 13px;
+}
+
+.btn--danger {
+  border-color: var(--clay);
+  background: var(--clay);
+  color: #fff;
+}
+
+.btn--danger:hover:not(:disabled) {
+  background: #c94c31;
+}
+
+.connection-list {
+  display: grid;
+  gap: 14px;
+  max-width: 640px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.connection-card {
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+}
+
+.connection-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.connection-name {
+  margin: 0;
+  font-size: 16px;
+  color: var(--forest);
+}
+
+.connection-detail {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.connection-badge {
+  flex: none;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #eef2ef;
+  color: var(--forest);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.connection-status {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.connection-status-ok {
+  color: #2c6149;
+}
+
+.connection-status-warn {
+  color: #8a5a15;
+}
+
+.connection-status-off {
+  font-style: italic;
+}
+
+/* Wraps rather than shrinks: the 44px touch target is the jobsite
+   non-negotiable (SPEC §7), so buttons stack on a phone instead of squeezing. */
+.connection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.connection-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
 }
