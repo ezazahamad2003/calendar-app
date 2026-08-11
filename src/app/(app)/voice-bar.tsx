@@ -198,6 +198,14 @@ export function VoiceBar() {
       ) : null}
 
       <div className="voicebar">
+        {/* The bar was previously an unlabelled input and a mic glyph, and read
+            as a search box — the headline feature of the product was invisible.
+            It says what it is now. */}
+        <p className="voicebar-label">
+          <span className="voicebar-badge">AI</span>
+          Tell Foreman what changed
+        </p>
+
         <form
           className="voicebar-form"
           onSubmit={(e) => {
@@ -242,7 +250,12 @@ export function VoiceBar() {
               : "Hold to talk to the schedule"
           }
         >
-          {stage.kind === "recording" ? "●" : "🎙"}
+          <span className="voicebar-mic-glyph" aria-hidden>
+            {stage.kind === "recording" ? "●" : "🎙"}
+          </span>
+          <span className="voicebar-mic-text" aria-hidden>
+            {stage.kind === "recording" ? "Listening" : "Hold to talk"}
+          </span>
         </button>
 
         <div className="voicebar-status" aria-live="polite">

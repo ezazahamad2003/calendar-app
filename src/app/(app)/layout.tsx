@@ -62,9 +62,20 @@ export default async function AppLayout({
         ) : null}
 
         <div className="rail-section">
-          <p className="rail-heading">Projects</p>
+          <div className="rail-section-head">
+            <p className="rail-heading">Projects</p>
+            {/* The empty state below already offers this; two adjacent add
+                links in a narrow rail is noise. */}
+            {projects.length > 0 ? (
+              <Link className="rail-add" href="/projects/new" aria-label="Add a project">
+                + New
+              </Link>
+            ) : null}
+          </div>
           {projects.length === 0 ? (
-            <p className="rail-empty">None yet</p>
+            <Link className="rail-empty-add" href="/projects/new">
+              Add your first project
+            </Link>
           ) : (
             <ul className="rail-projects">
               {projects.map(({ project, tasksLate }) => (

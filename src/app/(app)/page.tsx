@@ -73,14 +73,21 @@ export default async function DashboardPage({
           <section className="empty-card">
             <h2 className="empty-title">No projects yet</h2>
             <p className="empty-body">
-              Add your first job below, or seed a realistic demo project to see
-              the Gantt, calendar and cascade working before you enter real data.
+              Add a job to start scheduling, or seed a realistic demo project to
+              see the Gantt, calendar and cascade working before you enter real
+              data. Once a project exists you can talk to it using the AI bar at
+              the bottom of the screen.
             </p>
-            <form action={seedDemoProject}>
-              <button className="btn btn--ghost" type="submit">
-                Seed a demo project
-              </button>
-            </form>
+            <div className="empty-actions">
+              <Link className="btn" href="/projects/new">
+                Add a project
+              </Link>
+              <form action={seedDemoProject}>
+                <button className="btn btn--ghost" type="submit">
+                  Seed a demo project
+                </button>
+              </form>
+            </div>
           </section>
         ) : (
           <section className="project-grid" aria-label="Projects">
@@ -120,7 +127,9 @@ export default async function DashboardPage({
           </section>
         )}
 
-        <NewProjectForm />
+        {/* Only offered once projects exist — the empty state above has its own
+            primary call to action, and /projects/new is always in the rail. */}
+        {projects.length > 0 ? <NewProjectForm /> : null}
       </div>
 
       <aside className="page-rail" aria-label="This month">
