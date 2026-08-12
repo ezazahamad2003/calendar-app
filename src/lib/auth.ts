@@ -3,7 +3,7 @@ import "server-only";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 
-import { getEnv } from "@/lib/env";
+import { configProblems, getEnv } from "@/lib/env";
 
 /**
  * Who is allowed to change the schedule.
@@ -132,6 +132,19 @@ export async function signIn(passcode: string, ip: string): Promise<SignInResult
     };
   }
 
+  // Never let anyone in while the deployment is half-configured — a dev-value
+  // SESSION_SECRET would sign a cookie anybody could forge.
+  const problems = configProblems();
+  if (problems.length > 0) {
+    return {
+      ok: false,
+      message:
+        `This deployment is not finished being set up (${problems
+          .map((p) => p.variable)
+          .join(", ")}), so there is nothing to sign in to yet.`,
+    };
+  }
+
   const expected = getEnv().ADMIN_PASSCODE;
   if (!expected) {
     return {
@@ -185,9 +198,14 @@ export async function isOwner(): Promise<boolean> {
   const jar = await cookies();
   const token = jar.get(COOKIE)?.value;
 
+  // A production deployment missing its secrets is locked, not open. This is
+  // the check that makes it safe for the app to stay *up* while unconfigured
+  // so that `/gate` can explain itself — see `configProblems()`.
+  if (configProblems().length > 0) return false;
+
   // No passcode configured in development means a fresh clone runs without
-  // setup. In production `env.ts` refuses to serve without one, so this branch
-  // cannot open a deployed app up.
+  // setup. In production the line above has already returned, so this cannot
+  // open a deployed app up.
   if (!getEnv().ADMIN_PASSCODE) return process.env.NODE_ENV !== "production";
 
   return tokenIsValid(token, new Date());

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { GateForm } from "./gate-form";
 import { isOwner } from "@/lib/auth";
+import { configProblems } from "@/lib/env";
 
 export const metadata = { title: "Foreman" };
 
@@ -20,6 +21,34 @@ export default async function GatePage({
 }) {
   if (await isOwner()) redirect("/");
   const { next } = await searchParams;
+
+  // An unfinished deployment says so, rather than showing a passcode box that
+  // cannot possibly accept anything. Naming the variables gives away nothing —
+  // the app is locked either way — and without it the only symptom is a form
+  // that rejects the right passcode.
+  const problems = configProblems();
+  if (problems.length > 0) {
+    return (
+      <div className="gate">
+        <div className="gate-card">
+          <h1>Almost there</h1>
+          <p>
+            This deployment is locked until it is finished being set up. Set
+            these in the Vercel dashboard under Settings → Environment
+            Variables, then redeploy.
+          </p>
+          <ul className="setup-list">
+            {problems.map((problem) => (
+              <li key={problem.variable}>
+                <code>{problem.variable}</code>
+                <span>{problem.message}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="gate">

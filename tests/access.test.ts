@@ -132,26 +132,99 @@ describe("the passcode", () => {
   });
 });
 
-describe("production refuses to boot without a passcode", () => {
-  it("names the variable and says why", async () => {
+describe("an unconfigured production deployment", () => {
+  /** Run `body` as if this were an unconfigured production deployment. */
+  async function inBrokenProduction(body: () => Promise<void>) {
+    const previousEnv = process.env.NODE_ENV as string;
+    const previousPasscode = process.env.ADMIN_PASSCODE;
+    const previousSecret = process.env.SESSION_SECRET;
+
     resetEnvCache();
-    const previous = process.env.NODE_ENV as string;
     setNodeEnv("production");
     delete process.env.ADMIN_PASSCODE;
-
+    process.env.SESSION_SECRET = "dev-only-insecure-session-secret-do-not-ship-abcdef";
     vi.resetModules();
-    const { getEnv } = await import("@/lib/env");
-    expect(() => getEnv()).toThrow(/ADMIN_PASSCODE/);
 
-    setNodeEnv(previous);
+    try {
+      await body();
+    } finally {
+      setNodeEnv(previousEnv);
+      if (previousPasscode === undefined) delete process.env.ADMIN_PASSCODE;
+      else process.env.ADMIN_PASSCODE = previousPasscode;
+      if (previousSecret === undefined) delete process.env.SESSION_SECRET;
+      else process.env.SESSION_SECRET = previousSecret;
+      resetEnvCache();
+      vi.resetModules();
+    }
+  }
+
+  // The whole point of reporting rather than throwing. A throw out of getEnv()
+  // runs in the instrumentation hook, which kills the Node process, which
+  // 500s every route — including /gate, the one page that could have said
+  // what was wrong. The app must stay up so it can explain itself.
+  it("stays up, and names what is missing", async () => {
+    await inBrokenProduction(async () => {
+      const { getEnv, configProblems } = await import("@/lib/env");
+
+      expect(() => getEnv()).not.toThrow();
+
+      const problems = configProblems();
+      expect(problems.map((p) => p.variable)).toEqual([
+        "ADMIN_PASSCODE",
+        "SESSION_SECRET",
+      ]);
+      expect(problems[0].message).toMatch(/at least 16 characters/i);
+    });
+  });
+
+  it("is locked, not open", async () => {
+    await inBrokenProduction(async () => {
+      const { isOwner, requireOwner } = await import("@/lib/auth");
+      expect(await isOwner()).toBe(false);
+      await expect(requireOwner()).rejects.toThrow();
+    });
+  });
+
+  // Without this, a dev-value SESSION_SECRET — which is public — would sign a
+  // session cookie anyone could forge.
+  it("will not sign anyone in, even with a passcode typed", async () => {
+    await inBrokenProduction(async () => {
+      const { signIn } = await import("@/lib/auth");
+      const result = await signIn(PASSCODE, "1.2.3.4");
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.message).toMatch(/not finished being set up/i);
+        expect(result.message).toMatch(/ADMIN_PASSCODE/);
+      }
+    });
+  });
+
+  it("still refuses a genuinely malformed value at boot", async () => {
+    const previous = process.env.NEXT_PUBLIC_APP_URL;
     resetEnvCache();
+    process.env.NEXT_PUBLIC_APP_URL = "not-a-url";
+    vi.resetModules();
+
+    const { getEnv } = await import("@/lib/env");
+    // A bad value is a mistake, not an unfinished setup, and still fails loudly.
+    expect(() => getEnv()).toThrow(/NEXT_PUBLIC_APP_URL/);
+
+    process.env.NEXT_PUBLIC_APP_URL = previous;
+    resetEnvCache();
+  });
+
+  it("reports nothing in development, so a fresh clone just runs", async () => {
+    resetEnvCache();
+    vi.resetModules();
+    const { configProblems } = await import("@/lib/env");
+    expect(configProblems()).toEqual([]);
   });
 
   // `next build` runs with NODE_ENV=production. Demanding the passcode there
   // stops a clean checkout building at all — it breaks CI and the verification
   // step in DEPLOYMENT.md — while protecting nothing, because a build serves
   // no requests. The secrets stay required at runtime; see `isBuilding`.
-  it("still builds without one, because a build serves nothing", async () => {
+  it("reports nothing during a build, which serves no requests", async () => {
     resetEnvCache();
     const previousEnv = process.env.NODE_ENV as string;
     const previousPhase = process.env.NEXT_PHASE;
@@ -162,8 +235,11 @@ describe("production refuses to boot without a passcode", () => {
     process.env.SESSION_SECRET = "dev-only-insecure-session-secret-do-not-ship-abcdef";
 
     vi.resetModules();
-    const { getEnv } = await import("@/lib/env");
+    const { getEnv, configProblems } = await import("@/lib/env");
     expect(() => getEnv()).not.toThrow();
+    // Demanding the secrets here would stop a clean checkout building at all,
+    // and break CI, while protecting nothing.
+    expect(configProblems()).toEqual([]);
 
     setNodeEnv(previousEnv);
     if (previousPhase === undefined) delete process.env.NEXT_PHASE;

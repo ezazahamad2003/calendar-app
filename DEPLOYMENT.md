@@ -53,6 +53,17 @@ On first request the app seeds itself from `data/seed.json` and writes the
 document to Blob. From then on Blob is the source of truth and the seed is
 never read again.
 
+### If it says "Almost there"
+
+A deployment missing `ADMIN_PASSCODE` or `SESSION_SECRET` stays up but stays
+**locked**: every owner route redirects to `/gate`, which lists the variables
+still to set. Nothing is editable and nothing can be sent in that state — it is
+the safe failure, not a broken one. Set them and redeploy.
+
+It deliberately does not crash. Throwing on missing config takes the Node
+process down, which 500s every route including the page that would have told
+you what was wrong.
+
 ## After deploying
 
 1. Open the site, enter the passcode.
