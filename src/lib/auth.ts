@@ -172,13 +172,25 @@ export async function signOut(): Promise<void> {
  * passing through a page.
  */
 export async function isOwner(): Promise<boolean> {
+  // Read the cookie FIRST, unconditionally, before any branch that could
+  // return without it.
+  //
+  // Beyond being the answer, touching `cookies()` is what marks every calling
+  // page dynamic. An early return that skips it lets Next prerender those
+  // pages during the build — and if the passcode happens to be unset at build
+  // time, what gets prerendered is a *static redirect to /gate*, baked in and
+  // served forever afterwards even once the passcode is configured. The app
+  // would be permanently locked out by a build-time detail, which is a
+  // miserable thing to debug.
+  const jar = await cookies();
+  const token = jar.get(COOKIE)?.value;
+
   // No passcode configured in development means a fresh clone runs without
-  // setup. In production `env.ts` refuses to boot without one, so this branch
+  // setup. In production `env.ts` refuses to serve without one, so this branch
   // cannot open a deployed app up.
   if (!getEnv().ADMIN_PASSCODE) return process.env.NODE_ENV !== "production";
 
-  const jar = await cookies();
-  return tokenIsValid(jar.get(COOKIE)?.value, new Date());
+  return tokenIsValid(token, new Date());
 }
 
 /** Guard for anything that writes. Throws rather than returning a flag so a

@@ -146,6 +146,30 @@ describe("production refuses to boot without a passcode", () => {
     setNodeEnv(previous);
     resetEnvCache();
   });
+
+  // `next build` runs with NODE_ENV=production. Demanding the passcode there
+  // stops a clean checkout building at all — it breaks CI and the verification
+  // step in DEPLOYMENT.md — while protecting nothing, because a build serves
+  // no requests. The secrets stay required at runtime; see `isBuilding`.
+  it("still builds without one, because a build serves nothing", async () => {
+    resetEnvCache();
+    const previousEnv = process.env.NODE_ENV as string;
+    const previousPhase = process.env.NEXT_PHASE;
+
+    setNodeEnv("production");
+    process.env.NEXT_PHASE = "phase-production-build";
+    delete process.env.ADMIN_PASSCODE;
+    process.env.SESSION_SECRET = "dev-only-insecure-session-secret-do-not-ship-abcdef";
+
+    vi.resetModules();
+    const { getEnv } = await import("@/lib/env");
+    expect(() => getEnv()).not.toThrow();
+
+    setNodeEnv(previousEnv);
+    if (previousPhase === undefined) delete process.env.NEXT_PHASE;
+    else process.env.NEXT_PHASE = previousPhase;
+    resetEnvCache();
+  });
 });
 
 describe("the share token", () => {

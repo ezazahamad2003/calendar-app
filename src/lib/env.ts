@@ -27,7 +27,22 @@ const optionalString = () =>
     z.string().trim().min(1).optional(),
   );
 
-const isProduction = process.env.NODE_ENV === "production";
+/**
+ * Whether to insist on the production-only secrets.
+ *
+ * `next build` runs with `NODE_ENV=production`, so a naive check here makes the
+ * *build* require the passcode and the session secret. That is the wrong place
+ * to demand them: it stops `pnpm build` working on a clean checkout, breaks CI,
+ * and blocks the very verification step DEPLOYMENT.md tells you to run. Nothing
+ * is being served during a build, so nothing is exposed by their absence.
+ *
+ * `NEXT_PHASE` is set by Next only while building, which is what separates
+ * "compiling this app" from "running it". Missing secrets are still fatal —
+ * they just become fatal on the first request instead, where `getEnv()` throws
+ * and the app fails closed rather than serving an ungated schedule.
+ */
+const isBuilding = process.env.NEXT_PHASE === "phase-production-build";
+const isProduction = process.env.NODE_ENV === "production" && !isBuilding;
 
 /**
  * The passcode is the only thing between a public URL and a button that emails
