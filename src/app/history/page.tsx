@@ -1,12 +1,21 @@
-import { redirect } from "next/navigation";
-
 import { TitleBlock } from "@/components/title-block";
-import { isOwner } from "@/lib/auth";
 import { humanRange } from "@/lib/format-date";
 import { readDoc } from "@/lib/store";
 import type { Notification } from "@/lib/store/types";
 
 export const metadata = { title: "History — Foreman" };
+
+/**
+ * Always rendered per request.
+ *
+ * Every page here reads the schedule document, which changes. Without this
+ * Next prerenders the ones that touch no dynamic API and serves a snapshot of
+ * the seed forever — you would add an email address and the page would keep
+ * showing it blank. Previously the passcode check read cookies() and made
+ * these dynamic as a side effect; removing the gate removed that accident, so
+ * now it is stated.
+ */
+export const dynamic = "force-dynamic";
 
 /**
  * What changed, when, why, and who was told.
@@ -17,8 +26,6 @@ export const metadata = { title: "History — Foreman" };
  * with no address on file, a send that was deliberately turned off.
  */
 export default async function HistoryPage() {
-  if (!(await isOwner())) redirect("/gate");
-
   const doc = await readDoc();
 
   return (

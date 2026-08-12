@@ -5,8 +5,9 @@ for contractors juggling four to twelve jobs, on Supabase with row level
 security, Microsoft Graph mail and a two-way Outlook calendar sync. After the
 client conversation of **12 August 2026** almost none of that survived.
 
-What actually exists: one contractor, one job, a passcode, a JSON file, and a
-button he talks to.
+What actually exists: one contractor, one job, a JSON file, and a button he
+talks to. No sign-in of any kind — the main URL is open, and the read-only
+`/s/<token>` link is what the crew get.
 
 ## 0. The user
 
@@ -24,17 +25,17 @@ grid.
 | Was | Is | Why |
 |---|---|---|
 | Supabase Postgres, RLS, 8 migrations | One JSON document | One job, thirty-five activities. The whole schedule is smaller than a photograph and every screen reads all of it. |
-| Email sign-in, orgs, memberships | One passcode | There is one user. Accounts were ceremony for a table with one row in it. |
+| Email sign-in, orgs, memberships | Nothing at all | There is one user. Accounts were ceremony for a table with one row in it, and the passcode that briefly replaced them was one more thing to do on a phone with wet hands. |
 | Outlook + Gmail OAuth, calendar sync | Email via one API key | The client dropped the calendar outright: *"when something changed, email should be sent to them, and the reason."* No per-user OAuth also means no sign-in to remove. |
 | Month-grid calendar, Gantt | The wall chart | The client sent the spreadsheet and said the overview should look like that. |
 | Multi-project dashboard | One project | *"this is just one project."* |
-| — | Read-only share link | The crew needs to see the schedule and must not be able to change it or spend money on the microphone. |
+| — | Read-only share link | The crew needs to see the schedule and must not be able to change it or spend money on the microphone. It is now the only access control in the app. |
 
 ## 2. Stack
 
 Next.js (App Router, TypeScript strict), Vercel, Vercel Blob, OpenAI Whisper +
-GPT, Resend. That is the whole list. There is no database, no ORM, no auth
-library, and no UI framework beyond hand-authored CSS.
+GPT, Resend. That is the whole list. There is no database, no ORM, no auth at
+all, and no UI framework beyond hand-authored CSS.
 
 ## 3. The data model
 
@@ -99,6 +100,10 @@ proposal and writes nothing. The asymmetry is the design:
    `cascade()`'s output via `applyOperations`, the same path the write takes.
 7. **It never guesses an email address.** The model is told whether a contact
    has one, never what it is.
+
+Note that (1) is now the *only* thing standing between a stray visitor and a
+schedule change: with the gate gone, the confirm step is not merely a courtesy,
+it is the safety mechanism.
 
 ### The request the whole thing is built around
 

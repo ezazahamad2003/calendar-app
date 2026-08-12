@@ -17,9 +17,10 @@ import { buildContext } from "./context";
 /**
  * The assistant's two server actions: ask, then confirm.
  *
- * Both start with `requireOwner()`. A server action is reachable by POST
- * without ever rendering a page, so the proxy's redirect is not a gate — this
- * is. Anyone holding only the read-only share link fails here.
+ * Both start with `requireOwner()`, which is a no-op today because the app has
+ * no gate. The calls stay as the seam a check would go back into — a server
+ * action is reachable by POST without ever rendering a page, so this, not any
+ * routing rule, is where one would belong.
  */
 
 export type AskResult = {

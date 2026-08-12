@@ -1,13 +1,22 @@
-import { redirect } from "next/navigation";
-
 import { ContactRow } from "./contact-row";
 import { ShareCard } from "./share-card";
 import { TitleBlock } from "@/components/title-block";
-import { isOwner } from "@/lib/auth";
 import { getAppOrigin } from "@/lib/app-url";
 import { readDoc } from "@/lib/store";
 
 export const metadata = { title: "Crew — Foreman" };
+
+/**
+ * Always rendered per request.
+ *
+ * Every page here reads the schedule document, which changes. Without this
+ * Next prerenders the ones that touch no dynamic API and serves a snapshot of
+ * the seed forever — you would add an email address and the page would keep
+ * showing it blank. Previously the passcode check read cookies() and made
+ * these dynamic as a side effect; removing the gate removed that accident, so
+ * now it is stated.
+ */
+export const dynamic = "force-dynamic";
 
 /**
  * The trades, and who to tell.
@@ -19,8 +28,6 @@ export const metadata = { title: "Crew — Foreman" };
  * be discovered when a crew turns up on the wrong day.
  */
 export default async function CrewPage() {
-  if (!(await isOwner())) redirect("/gate");
-
   const doc = await readDoc();
   const jobCount = new Map<string, number>();
   for (const task of doc.tasks) {

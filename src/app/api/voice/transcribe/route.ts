@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { isOwner } from "@/lib/auth";
 import { getEnv, requireEnv } from "@/lib/env";
 
 export const runtime = "nodejs";
@@ -10,10 +9,9 @@ export const dynamic = "force-dynamic";
  * Audio blob → transcript, via Whisper. A route handler rather than a server
  * action because the payload is binary multipart, which actions handle poorly.
  *
- * Gated on the passcode like every other write path. It is not a write, but it
- * spends money per call and it is the front door to the one part of the app
- * that changes things — someone holding only the read-only link must not reach
- * it. The proxy does not cover `/api`, so this check is the only one.
+ * Ungated, like the rest of the app. Worth knowing: this endpoint spends money
+ * per call, so anyone who finds the URL can run up an OpenAI bill. If that ever
+ * matters, this is the place to put a check back — see `requireOwner()`.
  *
  * Push-to-talk clips are seconds long; the 15 MB cap is far above any real
  * clip and far below the platform's own request limit, so a runaway recording
@@ -22,13 +20,6 @@ export const dynamic = "force-dynamic";
 const MAX_BYTES = 15 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
-  if (!(await isOwner())) {
-    return NextResponse.json(
-      { error: "Enter the passcode before using the microphone." },
-      { status: 401 },
-    );
-  }
-
   const form = await request.formData().catch(() => null);
   const audio = form?.get("audio");
   if (!(audio instanceof Blob) || audio.size === 0) {

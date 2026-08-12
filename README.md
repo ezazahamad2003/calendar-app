@@ -69,14 +69,23 @@ and its output is committed.
 
 ## Access
 
-There is no sign-in and no accounts.
+There is no sign-in, no accounts, and **no passcode**. Whoever opens the app is
+treated as the contractor: they can talk to it, edit it, and send email.
 
-- **The contractor** knows one passcode (`ADMIN_PASSCODE`), types it once, and
-  the device is remembered for a year.
-- **Everyone else** gets the read-only link from the Crew page. They see the
-  chart and nothing else: no microphone, no editing, no addresses, no history.
-  The share page does not import the assistant, so those are absent from the
-  bundle rather than disabled in it.
+That is a deliberate choice, and it has consequences worth knowing:
+
+- Anyone who finds the URL can change the schedule and spend OpenAI credit.
+- Once mail is configured, they can cause email to reach real subcontractors.
+  Confirming still means reading a diff and tapping a button — but the button is
+  there for anyone.
+
+The **read-only link** from the Crew page is unaffected and still does its job:
+`/s/<token>` renders the chart and nothing else. It does not import the
+assistant, so the microphone and the confirm button are absent from that page's
+bundle rather than disabled in it. That is the link to hand the crew.
+
+To put a gate back, `requireOwner()` in `src/lib/auth.ts` is the single seam —
+every mutation already calls it.
 
 ## What it deliberately does not do
 

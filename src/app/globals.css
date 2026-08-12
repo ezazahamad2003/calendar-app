@@ -303,36 +303,6 @@ select {
   color: var(--booked);
 }
 
-/* ── The gate ───────────────────────────────────────────────────────────────*/
-
-.gate {
-  display: grid;
-  place-items: center;
-  min-height: 100dvh;
-  padding: 24px;
-}
-.gate-card {
-  width: 100%;
-  max-width: 360px;
-  padding: 28px 24px;
-  background: var(--paper);
-  border: 1px solid var(--rule-2);
-  border-radius: 5px;
-}
-.gate-card h1 {
-  margin: 0 0 2px;
-  font-family: var(--mono);
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-.gate-card p {
-  margin: 0 0 18px;
-  font-size: 13px;
-  color: var(--ink-2);
-}
-
 /* ── Crew ───────────────────────────────────────────────────────────────────*/
 
 .contact-list {
@@ -473,33 +443,3 @@ select {
   color: var(--ink-2);
 }
 
-/* The setup screen shown when a deployment is missing its secrets. */
-.setup-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.setup-list li {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 10px 12px;
-  border-left: 3px solid var(--mark);
-  background: var(--mark-2);
-  border-radius: 0 3px 3px 0;
-}
-.setup-list code {
-  font-family: var(--mono);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--mark-3);
-}
-.setup-list span {
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--ink-2);
-}

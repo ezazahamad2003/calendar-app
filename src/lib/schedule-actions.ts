@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { newShareToken, requireOwner, signIn, signOut } from "@/lib/auth";
+import { newShareToken, requireOwner } from "@/lib/auth";
 import { commitPlan } from "@/lib/ops/commit";
 import { buildPreview } from "@/lib/ops/preview";
 import { operationSchema } from "@/lib/ops/schema";
@@ -10,7 +10,6 @@ import type { Operation } from "@/lib/ops/schema";
 import type { Preview } from "@/lib/ops/preview";
 import { validatePlan } from "@/lib/ops/validate";
 import { readDoc, writeDoc } from "@/lib/store";
-import { headers } from "next/headers";
 import { z } from "zod";
 
 /**
@@ -21,37 +20,11 @@ import { z } from "zod";
  * `cascade`, `commitPlan` — so a typed change cascades and notifies identically
  * to a spoken one. Two write paths that behave differently is how a schedule
  * ends up with dates nobody can explain.
+ *
+ * `requireOwner()` is a no-op today: there is no gate. The calls stay because
+ * they mark every mutation, and restoring a gate should mean editing one
+ * function rather than hunting these down.
  */
-
-async function clientIp(): Promise<string> {
-  const h = await headers();
-  return (
-    h.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    h.get("x-real-ip") ??
-    "unknown"
-  );
-}
-
-// ── The gate ──────────────────────────────────────────────────────────────────
-
-/** `submitted` distinguishes "not tried yet" from "tried and it worked". */
-export type GateState = { error: string | null; submitted: boolean };
-
-export async function enterPasscode(
-  _previous: GateState,
-  formData: FormData,
-): Promise<GateState> {
-  const passcode = String(formData.get("passcode") ?? "");
-  const result = await signIn(passcode, await clientIp());
-  if (!result.ok) return { error: result.message, submitted: true };
-  revalidatePath("/", "layout");
-  return { error: null, submitted: true };
-}
-
-export async function leave(): Promise<void> {
-  await signOut();
-  revalidatePath("/", "layout");
-}
 
 // ── Editing ───────────────────────────────────────────────────────────────────
 

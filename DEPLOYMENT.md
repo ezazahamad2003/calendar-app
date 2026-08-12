@@ -1,7 +1,7 @@
 # Deploying Foreman
 
-Vercel, one project, four environment variables. There is no database to
-provision and no OAuth app to register — both went away with the rewrite.
+Vercel, one project, two environment variables. There is no database to
+provision, no OAuth app to register, and no passcode to choose.
 
 ## 1. Create a Blob store
 
@@ -17,8 +17,6 @@ the app refuses to start rather than let that happen quietly.
 | Variable | Value |
 |---|---|
 | `NEXT_PUBLIC_APP_URL` | `https://your-domain.com` — no trailing slash |
-| `ADMIN_PASSCODE` | The passcode. At least 16 characters. |
-| `SESSION_SECRET` | `openssl rand -base64 32` |
 | `OPENAI_API_KEY` | For the microphone and the assistant |
 
 Optional, for real email:
@@ -36,13 +34,6 @@ and it lets you exercise the whole flow safely.
 
 `FEATURE_SEND_EMAIL=false` is the same brake with the key already in place.
 
-### Choosing the passcode
-
-It is the only thing between a public URL and a button that emails
-subcontractors. `env.ts` enforces a 16-character floor; `auth.ts` throttles
-wrong guesses per instance, but that throttle is a nuisance to an attacker, not
-a defence. Use a passphrase he can say out loud and type once a year.
-
 ## 3. Deploy
 
 ```bash
@@ -53,20 +44,9 @@ On first request the app seeds itself from `data/seed.json` and writes the
 document to Blob. From then on Blob is the source of truth and the seed is
 never read again.
 
-### If it says "Almost there"
-
-A deployment missing `ADMIN_PASSCODE` or `SESSION_SECRET` stays up but stays
-**locked**: every owner route redirects to `/gate`, which lists the variables
-still to set. Nothing is editable and nothing can be sent in that state — it is
-the safe failure, not a broken one. Set them and redeploy.
-
-It deliberately does not crash. Throwing on missing config takes the Node
-process down, which 500s every route including the page that would have told
-you what was wrong.
-
 ## After deploying
 
-1. Open the site, enter the passcode.
+1. Open the site — it goes straight to the chart. There is no sign-in.
 2. Go to **Crew** and fill in email addresses. Every trade came off the wall
    chart without one, and until an address is there that trade cannot be told
    anything — the app never guesses. The page says how many are missing.
@@ -89,12 +69,14 @@ Then, against the deployment:
 - Open the share link in a private window: chart visible, no microphone, no
   Confirm, no addresses.
 
+> **The main URL is public.** Anyone with it has full edit access. Treat the
+> domain itself as the secret, or put a gate back via `requireOwner()`.
+
 ## Rotating things
 
 - **The share link** — Crew → *Issue a new link*. The old URL 404s immediately.
-- **The passcode** — change `ADMIN_PASSCODE` and redeploy. Existing sessions
-  survive, because the cookie is signed with `SESSION_SECRET`, not the passcode.
-- **Every session** — change `SESSION_SECRET`. Everyone is signed out.
+- **Nothing else.** There is no passcode and no session to rotate. The share
+  token is the only secret the app holds.
 
 ## Recovering the schedule
 

@@ -1,12 +1,13 @@
 ---
 name: foreman-qa
-description: Test Foreman end to end — static checks, the schedule engine, the access gate, and the assistant's behaviour against a corpus of transcripts. Use when asked to test the app, run QA, check a release, verify the assistant plans correctly, or investigate a report that it "did the wrong thing".
+description: Test Foreman end to end — static checks, the schedule engine, the read-only share view, and the assistant's behaviour against a corpus of transcripts. Use when asked to test the app, run QA, check a release, verify the assistant plans correctly, or investigate a report that it "did the wrong thing".
 ---
 
 # Testing Foreman
 
 Foreman is a construction schedule for one job, driven by an assistant you talk
-to. Most of its bugs have not been crashes — they have been the assistant
+to. There is no sign-in: the main URL is open, and `/s/<token>` is a read-only
+view for the crew. Most of its bugs have not been crashes — they have been the assistant
 confidently doing the wrong thing and saying it did the right thing, or the
 schedule quietly reshaping itself. Test accordingly: static checks catch almost
 none of the interesting failures.
@@ -41,6 +42,8 @@ A violation of any one is a P1 regardless of how small the diff that caused it.
    one message per trade rather than one per activity.
 10. **The share page cannot write and cannot spend money.** No microphone, no
     Confirm, no addresses, no history. It does not import the assistant at all.
+    With the passcode gone this is the app's only access control, so a
+    regression here is a P1 rather than a nuisance.
 
 ## Layers, cheapest first
 
@@ -108,6 +111,8 @@ Flag these clearly rather than attempting them:
   meter rather than breaking.
 - **Real email.** With `RESEND_API_KEY` set, a confirmed change sends for real.
   Use an address you control. Check the reason appears above the dates.
+- **The share link.** Open it in a private window and confirm there is no
+  microphone, no Confirm button and no addresses anywhere in the page source.
 - **The phone.** The chart is replaced by the agenda below 900px. Check there is
   no horizontal page scroll at 375px and the talk button clears the home bar.
 

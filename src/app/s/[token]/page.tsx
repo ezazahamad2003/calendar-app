@@ -12,6 +12,18 @@ export const metadata = {
 };
 
 /**
+ * Always rendered per request.
+ *
+ * Every page here reads the schedule document, which changes. Without this
+ * Next prerenders the ones that touch no dynamic API and serves a snapshot of
+ * the seed forever — you would add an email address and the page would keep
+ * showing it blank. Previously the passcode check read cookies() and made
+ * these dynamic as a side effect; removing the gate removed that accident, so
+ * now it is stated.
+ */
+export const dynamic = "force-dynamic";
+
+/**
  * The crew's view.
  *
  * Read-only by construction rather than by permission check — there is nothing

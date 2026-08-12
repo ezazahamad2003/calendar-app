@@ -1,222 +1,53 @@
 import "server-only";
 
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { cookies } from "next/headers";
-
-import { configProblems, getEnv } from "@/lib/env";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 
 /**
- * Who is allowed to change the schedule.
+ * Access.
  *
- * There are exactly two kinds of visitor, and no accounts:
+ * **There is no gate.** Whoever opens the app is treated as the contractor:
+ * they can talk to it, edit it, and send email. This was his call — the
+ * passcode was one more thing to do on a phone with wet hands, and the job is
+ * one job for one person.
  *
- *   the contractor  knows one passcode, typed once on his phone and remembered
- *                   for a year. He can talk to it, edit it, and send email.
- *   everyone else   has the read-only link. They see the wall chart and
- *                   nothing else — no voice, no edits, no addresses.
+ * What that means in practice, so nobody has to rediscover it:
  *
- * The previous build had email sign-in with no password, an org table and row
- * level security, for a single person running a single job. This is what
- * replaced all of it.
+ *   · Anyone who finds the URL can change the schedule and spend OpenAI credit.
+ *   · Once mail is configured, they can cause email to reach real
+ *     subcontractors. Confirming still requires reading a diff and tapping a
+ *     button, but the button is there for anyone.
  *
- * The passcode is a shared secret on a public URL, so it is treated like one:
- * compared in constant time, never logged, never sent to the client, and
- * throttled on failure.
+ * The read-only link is unaffected and still does its job: `/s/<token>` renders
+ * the chart and nothing else, because that page does not import the assistant.
+ * It remains the thing to hand to the crew.
+ *
+ * `requireOwner()` and `isOwner()` are kept deliberately rather than deleted.
+ * They are the seam a gate would go back into — one function to change, not
+ * fifteen call sites to find.
  */
 
-const COOKIE = "foreman_owner";
-/** He should type it once and then never again. */
-const SESSION_DAYS = 365;
-
-function secret(): string {
-  return getEnv().SESSION_SECRET;
+/** Always true: the app is open. See the note above. */
+export async function isOwner(): Promise<boolean> {
+  return true;
 }
 
-function sign(payload: string): string {
-  return createHmac("sha256", secret()).update(payload).digest("base64url");
+/**
+ * Where a write-permission check would go.
+ *
+ * A no-op today. Left in place at every call site that mutates, so restoring a
+ * gate is a change to this function alone.
+ */
+export async function requireOwner(): Promise<void> {
+  // Intentionally empty.
 }
 
 /** Compare without leaking how much of the value matched via timing. */
 function equals(a: string, b: string): boolean {
   const left = Buffer.from(a);
   const right = Buffer.from(b);
-  // timingSafeEqual throws on a length mismatch, which is itself a leak — but
-  // only of the length, and hashing first would cost more than it buys here.
+  // timingSafeEqual throws on a length mismatch, which leaks only the length.
   if (left.length !== right.length) return false;
   return timingSafeEqual(left, right);
-}
-
-/** `<expiresAtMs>.<signature>` — stateless, so there is no session table. */
-function mintToken(now: Date): string {
-  const expiresAt = now.getTime() + SESSION_DAYS * 86_400_000;
-  const payload = String(expiresAt);
-  return `${payload}.${sign(payload)}`;
-}
-
-function tokenIsValid(token: string | undefined, now: Date): boolean {
-  if (!token) return false;
-  const dot = token.lastIndexOf(".");
-  if (dot < 1) return false;
-
-  const payload = token.slice(0, dot);
-  const signature = token.slice(dot + 1);
-  if (!equals(signature, sign(payload))) return false;
-
-  const expiresAt = Number(payload);
-  return Number.isFinite(expiresAt) && expiresAt > now.getTime();
-}
-
-// ── Failed-attempt throttle ───────────────────────────────────────────────────
-//
-// In-process and therefore per-instance, which on Vercel means an attacker with
-// many connections gets more tries than this suggests. It is not the defence —
-// the passcode's length is, and `env.ts` enforces that. This exists so that a
-// script pointed at one instance gets slow enough to be pointless, and so a
-// human typo does not lock anybody out.
-
-const attempts = new Map<string, { count: number; until: number }>();
-const MAX_ATTEMPTS = 8;
-const LOCKOUT_MS = 60_000;
-
-function throttleKey(ip: string): string {
-  return ip || "unknown";
-}
-
-export function checkThrottle(ip: string, now = Date.now()): { retryInMs: number } | null {
-  const key = throttleKey(ip);
-  const record = attempts.get(key);
-  if (!record) return null;
-
-  // Still locked out.
-  if (record.until > now) return { retryInMs: record.until - now };
-
-  // A lockout that has run its course is forgotten, so a typo an hour ago does
-  // not count towards the next one. `until === 0` means no lockout has been
-  // reached yet — the running count must survive, or it can never reach the
-  // threshold and the throttle never engages at all.
-  if (record.until > 0) attempts.delete(key);
-
-  return null;
-}
-
-function recordFailure(ip: string, now = Date.now()): void {
-  const key = throttleKey(ip);
-  const record = attempts.get(key) ?? { count: 0, until: 0 };
-  record.count += 1;
-  if (record.count >= MAX_ATTEMPTS) {
-    record.until = now + LOCKOUT_MS;
-    record.count = 0;
-  }
-  attempts.set(key, record);
-}
-
-// ── Public API ────────────────────────────────────────────────────────────────
-
-export type SignInResult =
-  | { ok: true }
-  | { ok: false; message: string };
-
-/**
- * Check a passcode and, if it is right, remember the device.
- *
- * Returns a message rather than throwing: this is a form submission, and the
- * user needs to read what went wrong.
- */
-export async function signIn(passcode: string, ip: string): Promise<SignInResult> {
-  const throttled = checkThrottle(ip);
-  if (throttled) {
-    const seconds = Math.ceil(throttled.retryInMs / 1000);
-    return {
-      ok: false,
-      message: `Too many tries. Wait ${seconds} second${seconds === 1 ? "" : "s"} and try again.`,
-    };
-  }
-
-  // Never let anyone in while the deployment is half-configured — a dev-value
-  // SESSION_SECRET would sign a cookie anybody could forge.
-  const problems = configProblems();
-  if (problems.length > 0) {
-    return {
-      ok: false,
-      message:
-        `This deployment is not finished being set up (${problems
-          .map((p) => p.variable)
-          .join(", ")}), so there is nothing to sign in to yet.`,
-    };
-  }
-
-  const expected = getEnv().ADMIN_PASSCODE;
-  if (!expected) {
-    return {
-      ok: false,
-      message:
-        "No passcode is configured on the server, so there is nothing to sign in " +
-        "with. Set ADMIN_PASSCODE and redeploy.",
-    };
-  }
-
-  if (!equals(passcode.trim(), expected)) {
-    recordFailure(ip);
-    return { ok: false, message: "That passcode is not right." };
-  }
-
-  const jar = await cookies();
-  jar.set(COOKIE, mintToken(new Date()), {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: SESSION_DAYS * 86_400,
-  });
-  return { ok: true };
-}
-
-export async function signOut(): Promise<void> {
-  const jar = await cookies();
-  jar.delete(COOKIE);
-}
-
-/**
- * Is this request the contractor?
- *
- * Called at the top of every server action and every owner page. The proxy
- * redirects too, but that is for the address bar — this is the check that
- * actually decides, because a server action is reachable by POST without ever
- * passing through a page.
- */
-export async function isOwner(): Promise<boolean> {
-  // Read the cookie FIRST, unconditionally, before any branch that could
-  // return without it.
-  //
-  // Beyond being the answer, touching `cookies()` is what marks every calling
-  // page dynamic. An early return that skips it lets Next prerender those
-  // pages during the build — and if the passcode happens to be unset at build
-  // time, what gets prerendered is a *static redirect to /gate*, baked in and
-  // served forever afterwards even once the passcode is configured. The app
-  // would be permanently locked out by a build-time detail, which is a
-  // miserable thing to debug.
-  const jar = await cookies();
-  const token = jar.get(COOKIE)?.value;
-
-  // A production deployment missing its secrets is locked, not open. This is
-  // the check that makes it safe for the app to stay *up* while unconfigured
-  // so that `/gate` can explain itself — see `configProblems()`.
-  if (configProblems().length > 0) return false;
-
-  // No passcode configured in development means a fresh clone runs without
-  // setup. In production the line above has already returned, so this cannot
-  // open a deployed app up.
-  if (!getEnv().ADMIN_PASSCODE) return process.env.NODE_ENV !== "production";
-
-  return tokenIsValid(token, new Date());
-}
-
-/** Guard for anything that writes. Throws rather than returning a flag so a
- *  forgotten check cannot silently become an open door. */
-export async function requireOwner(): Promise<void> {
-  if (!(await isOwner())) {
-    throw new Error("You need to enter the passcode before you can change the schedule.");
-  }
 }
 
 /** Compare a URL's share token against the document's, in constant time. */
