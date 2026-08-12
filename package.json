@@ -9,17 +9,10 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "db:start": "npx supabase start",
-    "db:stop": "npx supabase stop",
-    "db:reset": "npx supabase db reset",
-    "db:push": "npx supabase db push",
-    "db:types": "npx supabase gen types typescript --local > src/lib/database.types.ts",
-    "test:rls": "npx supabase db reset && vitest run tests/rls"
+    "test:watch": "vitest"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.12.4",
-    "@supabase/supabase-js": "^2.112.0",
+    "@vercel/blob": "^2.8.0",
     "next": "16.2.12",
     "react": "19.2.4",
     "react-dom": "19.2.4",

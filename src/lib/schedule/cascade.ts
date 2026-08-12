@@ -133,6 +133,19 @@ export function cascade(input: CascadeInput): TaskChange[] {
     if (isDirect) {
       // The user's date wins, normalised forward off a weekend or holiday.
       resolved = addWorkDays(resolved as Date, 0, calendar);
+    } else if (!resolved) {
+      // Undated, and nobody asked for it to move. Leave it undated.
+      //
+      // A predecessor's dates are not enough to date a successor. Half a wall
+      // chart is deliberately undated — work that is real and ordered but not
+      // yet booked with anyone — and dating it from its predecessor is a guess
+      // dressed up as arithmetic. It is also loud: the schedule now emails the
+      // trade whose dates changed, so inventing a date here mails a
+      // subcontractor a booking no human ever made.
+      //
+      // The task still takes part in ordering, so once someone gives it a real
+      // date the chain below it moves normally.
+      continue;
     } else {
       const predecessors = incoming.get(taskId) ?? [];
       let earliest: Date | null = null;
@@ -155,9 +168,8 @@ export function cascade(input: CascadeInput): TaskChange[] {
         }
       }
 
-      // No constraint and no direct move → leave it alone.
+      // No constraint and no direct move → leave it where it is.
       if (earliest) resolved = earliest;
-      else if (!resolved) continue;
     }
 
     if (!resolved) continue;

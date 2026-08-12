@@ -209,6 +209,69 @@ describe("cascade", () => {
     expect(changes).toEqual([]);
   });
 
+  // Half the wall chart is undated on purpose: work that is real and ordered
+  // but not yet booked with a trade. A dated predecessor must not date it —
+  // that is a guess, and since a confirmed change emails the trade whose dates
+  // moved, it is a guess that mails someone a booking nobody made.
+  it("does not date an unscheduled successor from a scheduled predecessor", () => {
+    const changes = cascade({
+      tasks: [task("a", "2026-08-10", 5), task("b", null, 1)],
+      deps: [fs("a", "b")],
+      changed: new Map(),
+      calendar: MON_FRI,
+    });
+    expect(changes).toEqual([]);
+  });
+
+  it("still cascades past an undated task once it is given a date", () => {
+    // a → b → c, with b undated. Dating b directly must move c and leave a be.
+    const changes = cascade({
+      tasks: [task("a", "2026-08-10", 1), task("b", null, 2), task("c", "2026-09-01", 1)],
+      deps: [fs("a", "b"), fs("b", "c")],
+      changed: new Map([["b", "2026-08-17"]]),
+      calendar: MON_FRI,
+    });
+    expect(changes).toEqual([
+      {
+        taskId: "b",
+        fromStartDate: null,
+        toStartDate: "2026-08-17",
+        fromEndDate: null,
+        toEndDate: "2026-08-18",
+        direct: true,
+      },
+      {
+        taskId: "c",
+        fromStartDate: "2026-09-01",
+        toStartDate: "2026-08-19",
+        fromEndDate: "2026-09-01",
+        toEndDate: "2026-08-19",
+        direct: false,
+      },
+    ]);
+  });
+
+  it("an undated task in the middle does not block the rest of the chain", () => {
+    // a → b → c with b undated: a's move reaches nothing, because b is the only
+    // route to c and b has no dates to propagate.
+    const changes = cascade({
+      tasks: [task("a", "2026-08-10", 1), task("b", null, 2), task("c", "2026-09-01", 1)],
+      deps: [fs("a", "b"), fs("b", "c")],
+      changed: new Map([["a", "2026-08-12"]]),
+      calendar: MON_FRI,
+    });
+    expect(changes).toEqual([
+      {
+        taskId: "a",
+        fromStartDate: "2026-08-10",
+        toStartDate: "2026-08-12",
+        fromEndDate: "2026-08-10",
+        toEndDate: "2026-08-12",
+        direct: true,
+      },
+    ]);
+  });
+
   it("does not write to its inputs", () => {
     const tasks = [task("a", "2026-03-02", 3), task("b", "2026-03-05", 2)];
     const snapshot = JSON.stringify(tasks);

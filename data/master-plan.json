@@ -1,0 +1,569 @@
+{
+  "source": "SHOP.mpp",
+  "note": "Master construction sequence as authored in Microsoft Project, September 2025. Reference only \u2014 the live schedule is seed.json. Kept because it is the record of which trade follows which.",
+  "startDate": "2025-09-10",
+  "finishDate": "2026-03-02",
+  "tasks": [
+    {
+      "id": 1,
+      "name": "PGE application",
+      "startDate": "2025-07-29",
+      "finishDate": "2026-01-12",
+      "durationDays": 120,
+      "predecessors": []
+    },
+    {
+      "id": 2,
+      "name": "Excavate foudation",
+      "startDate": "2025-06-04",
+      "finishDate": "2025-06-17",
+      "durationDays": 10,
+      "predecessors": []
+    },
+    {
+      "id": 3,
+      "name": "Install footing, wall, and curb rebar",
+      "startDate": "2025-06-18",
+      "finishDate": "2025-07-01",
+      "durationDays": 10,
+      "predecessors": [
+        {
+          "id": 2,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Plumbing underslab",
+      "startDate": "2025-07-01",
+      "finishDate": "2025-07-07",
+      "durationDays": 5,
+      "predecessors": [
+        {
+          "id": 3,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Electrical underslab",
+      "startDate": "2025-07-07",
+      "finishDate": "2025-07-08",
+      "durationDays": 1,
+      "predecessors": [
+        {
+          "id": 4,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Fire low volt",
+      "startDate": "2025-07-09",
+      "finishDate": "2025-07-09",
+      "durationDays": 1,
+      "predecessors": [
+        {
+          "id": 5,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "Fire line",
+      "startDate": "2025-08-06",
+      "finishDate": "2025-08-12",
+      "durationDays": 5,
+      "predecessors": []
+    },
+    {
+      "id": 8,
+      "name": "REBAR Inspection County",
+      "startDate": "2025-07-09",
+      "finishDate": "2025-07-09",
+      "durationDays": 1,
+      "predecessors": [
+        {
+          "id": 3,
+          "type": "FS",
+          "lagDays": 0
+        },
+        {
+          "id": 4,
+          "type": "FS",
+          "lagDays": 0
+        },
+        {
+          "id": 5,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "name": "REBAR Inspection Special KC",
+      "startDate": "2025-07-09",
+      "finishDate": "2025-07-09",
+      "durationDays": 1,
+      "predecessors": [
+        {
+          "id": 3,
+          "type": "FS",
+          "lagDays": 0
+        },
+        {
+          "id": 4,
+          "type": "FS",
+          "lagDays": 0
+        },
+        {
+          "id": 5,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "name": "Pour Footing and curb",
+      "startDate": "2025-07-10",
+      "finishDate": "2025-07-10",
+      "durationDays": 1,
+      "predecessors": [
+        {
+          "id": 8,
+          "type": "FS",
+          "lagDays": 0
+        },
+        {
+          "id": 9,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "name": "Install Stego / Slab rebar",
+      "startDate": "2025-07-28",
+      "finishDate": "2025-08-01",
+      "durationDays": 5,
+      "predecessors": []
+    },
+    {
+      "id": 12,
+      "name": "REBAR Inspection County",
+      "startDate": "2025-08-01",
+      "finishDate": "2025-08-01",
+      "durationDays": 1,
+      "predecessors": [
+        {
+          "id": 11,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "name": "REBAR Inspection KC",
+      "startDate": "2025-08-01",
+      "finishDate": "2025-08-01",
+      "durationDays": 1,
+      "predecessors": [
+        {
+          "id": 11,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "name": "Pour Slab",
+      "startDate": "2025-09-10",
+      "finishDate": "2025-09-10",
+      "durationDays": 1,
+      "predecessors": [
+        {
+          "id": 12,
+          "type": "FS",
+          "lagDays": 0
+        },
+        {
+          "id": 13,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "name": "Steel delivery",
+      "startDate": "2025-09-26",
+      "finishDate": "2025-09-30",
+      "durationDays": 3,
+      "predecessors": []
+    },
+    {
+      "id": 16,
+      "name": "Buidling install",
+      "startDate": "2025-10-01",
+      "finishDate": "2025-11-18",
+      "durationDays": 35,
+      "predecessors": [
+        {
+          "id": 15,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "name": "Order steel posts",
+      "startDate": "2025-09-10",
+      "finishDate": "2025-09-10",
+      "durationDays": 1,
+      "predecessors": []
+    },
+    {
+      "id": 18,
+      "name": "Steel hanger layout",
+      "startDate": "2025-09-10",
+      "finishDate": "2025-09-10",
+      "durationDays": 1,
+      "predecessors": []
+    },
+    {
+      "id": 19,
+      "name": "Weld steel hangers",
+      "startDate": "2025-09-10",
+      "finishDate": "2025-09-10",
+      "durationDays": 1,
+      "predecessors": []
+    },
+    {
+      "id": 20,
+      "name": "Roof Sheathing",
+      "startDate": "2025-11-07",
+      "finishDate": "2025-11-14",
+      "durationDays": 6,
+      "predecessors": []
+    },
+    {
+      "id": 21,
+      "name": "Sheathing inspection",
+      "startDate": "2025-09-10",
+      "finishDate": "2025-09-10",
+      "durationDays": 1,
+      "predecessors": []
+    },
+    {
+      "id": 22,
+      "name": "Roof Underlayment",
+      "startDate": "2025-11-18",
+      "finishDate": "2025-11-21",
+      "durationDays": 4,
+      "predecessors": []
+    },
+    {
+      "id": 23,
+      "name": "CFS Framing",
+      "startDate": "2025-11-24",
+      "finishDate": "2025-12-26",
+      "durationDays": 25,
+      "predecessors": [
+        {
+          "id": 22,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "name": "Special inspection bolts",
+      "startDate": "2025-11-19",
+      "finishDate": "2025-11-19",
+      "durationDays": 1,
+      "predecessors": [
+        {
+          "id": 16,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "name": "Framing inspection",
+      "startDate": "2025-12-29",
+      "finishDate": "2025-12-29",
+      "durationDays": 1,
+      "predecessors": [
+        {
+          "id": 23,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "name": "Install Door frames",
+      "startDate": "2025-12-30",
+      "finishDate": "2026-01-02",
+      "durationDays": 4,
+      "predecessors": [
+        {
+          "id": 25,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 27,
+      "name": "Exterior Shear",
+      "startDate": "2026-01-05",
+      "finishDate": "2026-01-16",
+      "durationDays": 10,
+      "predecessors": [
+        {
+          "id": 26,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 28,
+      "name": "Shear inspection",
+      "startDate": "2026-01-19",
+      "finishDate": "2026-01-19",
+      "durationDays": 1,
+      "predecessors": [
+        {
+          "id": 27,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "name": "Paper and wrap inspection",
+      "startDate": "2026-01-20",
+      "finishDate": "2026-01-28",
+      "durationDays": 7,
+      "predecessors": [
+        {
+          "id": 28,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "name": "Lath inspection",
+      "startDate": "2026-01-29",
+      "finishDate": "2026-01-29",
+      "durationDays": 1,
+      "predecessors": [
+        {
+          "id": 29,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "name": "Scratch coat",
+      "startDate": "2026-01-30",
+      "finishDate": "2026-02-05",
+      "durationDays": 5,
+      "predecessors": [
+        {
+          "id": 30,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "name": "Brown",
+      "startDate": "2026-02-13",
+      "finishDate": "2026-02-19",
+      "durationDays": 5,
+      "predecessors": [
+        {
+          "id": 31,
+          "type": "FS",
+          "lagDays": 5
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "name": "Install plaster casing detail at wine door",
+      "startDate": "2025-09-10",
+      "finishDate": "2025-09-10",
+      "durationDays": 1,
+      "predecessors": []
+    },
+    {
+      "id": 34,
+      "name": "Finish coat",
+      "startDate": "2026-02-24",
+      "finishDate": "2026-03-02",
+      "durationDays": 5,
+      "predecessors": [
+        {
+          "id": 32,
+          "type": "FS",
+          "lagDays": 7
+        }
+      ]
+    },
+    {
+      "id": 35,
+      "name": "Lumber delivery / barges rafters",
+      "startDate": "2025-09-10",
+      "finishDate": "2025-09-10",
+      "durationDays": 1,
+      "predecessors": []
+    },
+    {
+      "id": 36,
+      "name": "Stain out riggers",
+      "startDate": "2025-09-11",
+      "finishDate": "2025-09-19",
+      "durationDays": 7,
+      "predecessors": [
+        {
+          "id": 35,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 37,
+      "name": "Roof out riggers",
+      "startDate": "2025-09-11",
+      "finishDate": "2025-10-03",
+      "durationDays": 17,
+      "predecessors": [
+        {
+          "id": 35,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 38,
+      "name": "Final sheathing",
+      "startDate": "2025-10-06",
+      "finishDate": "2025-10-08",
+      "durationDays": 3,
+      "predecessors": [
+        {
+          "id": 37,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 39,
+      "name": "Interior framing",
+      "startDate": "2025-12-29",
+      "finishDate": "2026-01-02",
+      "durationDays": 5,
+      "predecessors": [
+        {
+          "id": 23,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 40,
+      "name": "Rough plumbing top out",
+      "startDate": "2025-12-29",
+      "finishDate": "2025-12-31",
+      "durationDays": 3,
+      "predecessors": [
+        {
+          "id": 23,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 41,
+      "name": "Rough Electric",
+      "startDate": "2025-12-29",
+      "finishDate": "2026-01-09",
+      "durationDays": 10,
+      "predecessors": [
+        {
+          "id": 23,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 42,
+      "name": "Rough inspections",
+      "startDate": "2026-01-12",
+      "finishDate": "2026-01-12",
+      "durationDays": 1,
+      "predecessors": [
+        {
+          "id": 40,
+          "type": "FS",
+          "lagDays": 0
+        },
+        {
+          "id": 41,
+          "type": "FS",
+          "lagDays": 0
+        }
+      ]
+    },
+    {
+      "id": 43,
+      "name": "Roof insulation",
+      "startDate": "2025-09-10",
+      "finishDate": "2025-09-10",
+      "durationDays": 1,
+      "predecessors": []
+    },
+    {
+      "id": 44,
+      "name": "Wall Insulation",
+      "startDate": "2025-09-10",
+      "finishDate": "2025-09-10",
+      "durationDays": 1,
+      "predecessors": []
+    }
+  ]
+}

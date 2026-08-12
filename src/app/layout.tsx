@@ -1,23 +1,30 @@
 import type { Metadata, Viewport } from "next";
+
 import "./globals.css";
-import "./auth.css";
-import "./app.css";
-import "./landing.css";
+import "./chart.css";
+import "./assistant.css";
 
 export const metadata: Metadata = {
-  // Pages override this. The landing page sets its own, which is the one that
-  // ends up in search results and link previews.
-  title: "Foreman — construction scheduling you can talk to",
+  title: "Foreman — the job schedule",
   description:
-    "Move a date by saying so. Foreman cascades the dependent tasks, drafts the email and waits for you to confirm.",
+    "The wall chart, on your phone. Say what changed and it works out what moves with it.",
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#173532",
+  // Matches the title block, so the phone's status bar reads as part of the
+  // sheet rather than sitting on top of it.
+  themeColor: "#f8fafc",
+  // The one screen that must survive being pinched: the chart is deliberately
+  // wider than a phone, and zooming it is a legitimate thing to want.
+  maximumScale: 5,
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body>{children}</body></html>;
+  return (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  );
 }

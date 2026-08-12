@@ -1,0 +1,489 @@
+/**
+ * The wall chart.
+ *
+ * A CSS grid of one column per calendar day, with the team and activity rail
+ * frozen on the left. Nine weeks of 24px columns overflows any laptop, which is
+ * correct — the paper chart is wider than a desk too, and the useful gesture is
+ * to scroll sideways with the activity names staying put.
+ *
+ * The signature is `.today-line`: one hot vertical rule running the full height
+ * of the chart, through every section. It is the highlighter mark the foreman
+ * draws on the paper every morning, and it is the instant answer to the only
+ * question he opens this to ask.
+ */
+
+.chart-wrap {
+  position: relative;
+  overflow: auto;
+  max-height: calc(100dvh - 190px);
+  background: var(--paper);
+  border: 1px solid var(--rule-2);
+  border-radius: 4px;
+}
+
+.chart {
+  display: grid;
+  /* Team | activity | one column per day. */
+  grid-template-columns: 96px calc(var(--rail-w) - 96px) repeat(var(--days), var(--day-w));
+  min-width: min-content;
+  position: relative;
+}
+
+/* ── Header rows ────────────────────────────────────────────────────────────*/
+
+.chart-head {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: contents;
+}
+
+.ch {
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  border-right: 1px solid var(--rule);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+/* Month banner. Spans set inline from the model. */
+.ch-month {
+  padding: 5px 7px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--ink-2);
+  border-right: 1px solid var(--rule-2);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.ch-day {
+  top: 26px;
+  padding: 3px 0 4px;
+  text-align: center;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+.ch-day .dow {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.ch-day .dom {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.ch-day.off {
+  background: var(--sheet-off);
+}
+.ch-day.off .dom {
+  color: var(--ink-3);
+  font-weight: 500;
+}
+/* Heavier rule at each week boundary, as a plotted grid has. */
+.ch-day.week-start,
+.cell.week-start {
+  border-left: 1px solid var(--rule-2);
+}
+
+.ch-day.today {
+  background: var(--mark);
+}
+.ch-day.today .dow,
+.ch-day.today .dom {
+  color: #fff;
+  font-weight: 700;
+}
+
+/* The rail's own two header cells, frozen in both directions. */
+.ch-rail {
+  z-index: 30;
+  left: 0;
+  padding: 5px 9px;
+  display: flex;
+  align-items: flex-end;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.ch-rail.team {
+  left: 0;
+}
+.ch-rail.activity {
+  left: 96px;
+  border-right: 1px solid var(--rule-2);
+}
+
+/* ── Section banners ────────────────────────────────────────────────────────*/
+
+.section-row {
+  grid-column: 1 / -1;
+  position: sticky;
+  left: 0;
+  padding: 7px 10px 6px;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  /* Only as wide as the viewport, so the banner text stays visible while the
+     grid is scrolled sideways. */
+  width: max-content;
+  min-width: 100%;
+}
+
+/* ── Activity rows ──────────────────────────────────────────────────────────*/
+
+.rail {
+  position: sticky;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 4px 8px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  font-size: 12px;
+}
+.rail-team {
+  left: 0;
+  gap: 6px;
+  border-right: 1px solid var(--rule);
+}
+.rail-activity {
+  left: 96px;
+  border-right: 1px solid var(--rule-2);
+  line-height: 1.25;
+}
+.row-alt .rail,
+.row-alt .cell {
+  background: var(--paper-2);
+}
+
+.team-chip {
+  flex-shrink: 0;
+  width: 4px;
+  align-self: stretch;
+  margin: 2px 0;
+  border-radius: 1px;
+}
+.team-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--ink-2);
+}
+
+.activity-name {
+  min-width: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+/* Finished work recedes rather than disappearing — it is still the record of
+   what happened, and it is what the county asks about. */
+.row-done .activity-name,
+.row-done .team-name {
+  color: var(--done);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.cell {
+  position: relative;
+  min-height: 30px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  border-right: 1px solid color-mix(in srgb, var(--rule) 55%, transparent);
+}
+.cell.off {
+  background: var(--sheet-off);
+}
+.row-alt .cell.off {
+  background: var(--sheet-off);
+}
+
+/* ── The bar ────────────────────────────────────────────────────────────────
+   One element spanning its whole run rather than a mark per cell. The paper
+   has a mark in every day box because a person drew each one; on screen a
+   continuous bar reads as one booking, which is what it is. */
+
+.bar {
+  position: absolute;
+  inset: 4px 1px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 5px;
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  z-index: 4;
+}
+
+/* Pencilled in: an outline, not a fill. Nobody has committed to this. */
+.bar-tentative {
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--bar-fill) 22%, transparent) 0 5px,
+    transparent 5px 10px
+  );
+  border: 1px dashed var(--bar-fill);
+  color: var(--bar-fill);
+}
+.bar-done {
+  background: color-mix(in srgb, var(--bar-fill) 28%, var(--paper));
+  border: 1px solid color-mix(in srgb, var(--bar-fill) 45%, transparent);
+  color: var(--ink-2);
+}
+.bar-blocked {
+  background: var(--blocked);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+.bar-planned {
+  background: var(--sheet-off);
+  border: 1px dashed var(--rule-2);
+  color: var(--ink-2);
+}
+
+/* Runs off the edge of the window: square that end off and notch it. */
+.bar.cont-left {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  margin-left: -1px;
+  clip-path: polygon(4px 0, 100% 0, 100% 100%, 4px 100%, 0 50%);
+}
+.bar.cont-right {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  margin-right: -1px;
+  clip-path: polygon(0 0, calc(100% - 4px) 0, 100% 50%, calc(100% - 4px) 100%, 0 100%);
+}
+
+.bar .mark {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+.bar .len {
+  flex-shrink: 0;
+  margin-left: auto;
+  opacity: 0.7;
+  font-weight: 600;
+}
+
+/* ── Today ──────────────────────────────────────────────────────────────────*/
+
+.today-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--mark);
+  /* Above the bars (4) so it reads as drawn over them, but below the frozen
+     rail (10) and the header (20) — the line belongs to the grid and must
+     disappear under the rail when the chart is scrolled sideways. */
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* ── Empty and undated ──────────────────────────────────────────────────────*/
+
+.no-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 6px;
+  border: 1px dashed var(--rule-2);
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* ── Legend ─────────────────────────────────────────────────────────────────*/
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  padding: 8px 2px 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend i {
+  width: 18px;
+  height: 10px;
+  border-radius: 2px;
+  font-style: normal;
+}
+
+.chart-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.chart-nav .range {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--ink-2);
+}
+
+/* ── Phone ──────────────────────────────────────────────────────────────────
+   Below 900px the grid is replaced entirely by the agenda, not shrunk. Sixty
+   columns cannot be made legible on a phone, and the question on site is
+   "who is here today", which is a list. */
+
+.only-wide {
+  display: block;
+}
+.only-narrow {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .only-wide {
+    display: none;
+  }
+  .only-narrow {
+    display: block;
+  }
+  .page {
+    padding: 12px 12px 132px;
+  }
+}
+
+.agenda-day {
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--paper);
+  overflow: hidden;
+}
+.agenda-day + .agenda-day {
+  margin-top: 10px;
+}
+.agenda-day.is-today {
+  border-color: var(--mark);
+  box-shadow: 0 0 0 1px var(--mark);
+}
+
+.agenda-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--sheet);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.agenda-day.is-today .agenda-head {
+  background: var(--mark);
+  color: #fff;
+  border-bottom-color: var(--mark-3);
+}
+.agenda-head .rel {
+  margin-left: auto;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  opacity: 0.8;
+}
+
+.agenda-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+}
+.agenda-item + .agenda-item {
+  border-top: 1px solid var(--rule);
+}
+.agenda-item .swatch {
+  flex-shrink: 0;
+  width: 4px;
+  align-self: stretch;
+  min-height: 30px;
+  border-radius: 2px;
+}
+.agenda-item .body {
+  min-width: 0;
+  flex: 1;
+}
+.agenda-item .name {
+  font-size: 14px;
+  line-height: 1.3;
+}
+.agenda-item .meta {
+  margin-top: 2px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+  color: var(--ink-2);
+}
+
+.pill {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.pill-confirmed {
+  background: var(--booked-2);
+  color: var(--booked);
+}
+.pill-tentative {
+  background: var(--sheet-off);
+  color: var(--pencil);
+}
+.pill-done {
+  background: var(--sheet-off);
+  color: var(--done);
+}
+.pill-blocked {
+  background: #f8dedc;
+  color: var(--blocked);
+}
+.pill-planned {
+  background: var(--sheet-off);
+  color: var(--ink-3);
+}

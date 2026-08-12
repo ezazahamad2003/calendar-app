@@ -1,0 +1,472 @@
+{
+  "source": "AG SHOP 8.10.26.xls",
+  "project": {
+    "name": "Suisun AG Shop",
+    "client": "Adair Family Wines",
+    "timezone": "America/Los_Angeles"
+  },
+  "calendar": {
+    "workingDays": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "holidays": []
+  },
+  "sections": [
+    "AG SHOP BUILDING",
+    "ORDERS"
+  ],
+  "tasks": [
+    {
+      "id": "install-fire-riser-sprinkler",
+      "section": "AG SHOP BUILDING",
+      "name": "Install Fire Riser sprinkler",
+      "team": "Harvpro",
+      "startDate": "2026-08-12",
+      "durationDays": 1,
+      "status": "confirmed",
+      "order": 0
+    },
+    {
+      "id": "hydro-fire-pump-room",
+      "section": "AG SHOP BUILDING",
+      "name": "Hydro Fire pump room",
+      "team": "Harpro",
+      "startDate": "2026-08-14",
+      "durationDays": 2,
+      "status": "confirmed",
+      "order": 1
+    },
+    {
+      "id": "fire-pump-start-up-test-flush",
+      "section": "AG SHOP BUILDING",
+      "name": "Fire pump Start up / Test / Flush",
+      "team": "Harvpro",
+      "startDate": "2026-08-19",
+      "durationDays": 1,
+      "status": "confirmed",
+      "order": 2
+    },
+    {
+      "id": "the-fire-consultant-inpection",
+      "section": "AG SHOP BUILDING",
+      "name": "The Fire Consultant inpection",
+      "team": "Harvpro",
+      "startDate": "2026-08-21",
+      "durationDays": 1,
+      "status": "confirmed",
+      "order": 3
+    },
+    {
+      "id": "inspection",
+      "section": "AG SHOP BUILDING",
+      "name": "INSPECTION",
+      "team": "Solano Fire",
+      "startDate": "2026-08-19",
+      "durationDays": 1,
+      "status": "confirmed",
+      "order": 4
+    },
+    {
+      "id": "install-downspouts",
+      "section": "AG SHOP BUILDING",
+      "name": "Install Downspouts",
+      "team": "Solano Seamless",
+      "startDate": "2026-08-26",
+      "durationDays": 2,
+      "status": "tentative",
+      "order": 5
+    },
+    {
+      "id": "install-14-arkestone-door-casing",
+      "section": "AG SHOP BUILDING",
+      "name": "Install 14\" Arkestone door casing",
+      "team": "Goldfinch",
+      "startDate": null,
+      "durationDays": 1,
+      "status": "planned",
+      "order": 6
+    },
+    {
+      "id": "color-coat",
+      "section": "AG SHOP BUILDING",
+      "name": "Color Coat",
+      "team": "Goldfinch",
+      "startDate": "2026-08-10",
+      "durationDays": 10,
+      "status": "tentative",
+      "order": 7
+    },
+    {
+      "id": "build-fake-metal-wine-door",
+      "section": "AG SHOP BUILDING",
+      "name": "Build fake metal wine door",
+      "team": null,
+      "startDate": null,
+      "durationDays": 1,
+      "status": "planned",
+      "order": 8
+    },
+    {
+      "id": "finish-grade-west-side-heli-pad",
+      "section": "AG SHOP BUILDING",
+      "name": "Finish grade West side HELI PAD",
+      "team": "VacaValley",
+      "startDate": null,
+      "durationDays": 1,
+      "status": "planned",
+      "order": 9
+    },
+    {
+      "id": "electrical-inspection",
+      "section": "AG SHOP BUILDING",
+      "name": "Electrical Inspection",
+      "team": "Solanon County",
+      "startDate": "2026-08-10",
+      "durationDays": 1,
+      "status": "done",
+      "order": 10
+    },
+    {
+      "id": "ct-and-meter-install",
+      "section": "AG SHOP BUILDING",
+      "name": "CT and Meter install",
+      "team": "PGE",
+      "startDate": "2026-08-17",
+      "durationDays": 1,
+      "status": "confirmed",
+      "order": 11
+    },
+    {
+      "id": "new-pole-and-transformer-install",
+      "section": "AG SHOP BUILDING",
+      "name": "New pole and transformer install",
+      "team": "PGE",
+      "startDate": null,
+      "durationDays": 1,
+      "status": "planned",
+      "order": 12
+    },
+    {
+      "id": "finish-grade-for-ac-and-concrete",
+      "section": "AG SHOP BUILDING",
+      "name": "Finish Grade for AC and Concrete",
+      "team": "VacaValley",
+      "startDate": "2026-08-10",
+      "durationDays": 5,
+      "status": "confirmed",
+      "order": 13
+    },
+    {
+      "id": "rebar-inspection",
+      "section": "AG SHOP BUILDING",
+      "name": "Rebar inspection",
+      "team": "County",
+      "startDate": null,
+      "durationDays": 1,
+      "status": "planned",
+      "order": 14
+    },
+    {
+      "id": "pour-heli-pad",
+      "section": "AG SHOP BUILDING",
+      "name": "Pour Heli Pad",
+      "team": "VacaValley",
+      "startDate": null,
+      "durationDays": 1,
+      "status": "planned",
+      "order": 15
+    },
+    {
+      "id": "paving",
+      "section": "AG SHOP BUILDING",
+      "name": "Paving",
+      "team": "VacaValley",
+      "startDate": null,
+      "durationDays": 1,
+      "status": "planned",
+      "order": 16
+    },
+    {
+      "id": "concrete-entry-drive",
+      "section": "AG SHOP BUILDING",
+      "name": "Concrete entry drive",
+      "team": "VacaValley",
+      "startDate": null,
+      "durationDays": 1,
+      "status": "planned",
+      "order": 17
+    },
+    {
+      "id": "signage",
+      "section": "AG SHOP BUILDING",
+      "name": "Signage",
+      "team": "Signarama",
+      "startDate": null,
+      "durationDays": 1,
+      "status": "planned",
+      "order": 18
+    },
+    {
+      "id": "install-bathroom-door",
+      "section": "AG SHOP BUILDING",
+      "name": "Install bathroom Door",
+      "team": "Adair Crew",
+      "startDate": null,
+      "durationDays": 1,
+      "status": "planned",
+      "order": 19
+    },
+    {
+      "id": "install-fire-alarm",
+      "section": "AG SHOP BUILDING",
+      "name": "Install Fire Alarm",
+      "team": "Bay Alarm",
+      "startDate": "2026-08-10",
+      "durationDays": 1,
+      "status": "done",
+      "order": 20
+    },
+    {
+      "id": "install-wainscot-in-bathroom-after-door-install",
+      "section": "AG SHOP BUILDING",
+      "name": "Install Wainscot in Bathroom after door install",
+      "team": "Adair Crew",
+      "startDate": null,
+      "durationDays": 1,
+      "status": "planned",
+      "order": 21
+    },
+    {
+      "id": "install-security-cameras",
+      "section": "AG SHOP BUILDING",
+      "name": "Install security / Cameras",
+      "team": "PVLS",
+      "startDate": "2026-08-17",
+      "durationDays": 2,
+      "status": "confirmed",
+      "order": 22
+    },
+    {
+      "id": "finish-electrical-exterior-lighitng",
+      "section": "AG SHOP BUILDING",
+      "name": "Finish Electrical / Exterior Lighitng",
+      "team": "Vacaville Electric",
+      "startDate": null,
+      "durationDays": 1,
+      "status": "planned",
+      "order": 23
+    },
+    {
+      "id": "interior-finish",
+      "section": "AG SHOP BUILDING",
+      "name": "Interior finish",
+      "team": "Vacaville Electric",
+      "startDate": "2026-08-10",
+      "durationDays": 5,
+      "status": "confirmed",
+      "order": 24
+    },
+    {
+      "id": "install-outside-untis",
+      "section": "AG SHOP BUILDING",
+      "name": "Install outside untis",
+      "team": "Whirco",
+      "startDate": "2026-08-10",
+      "durationDays": 2,
+      "status": "confirmed",
+      "order": 25
+    },
+    {
+      "id": "install-exterior-threshold-and-locks",
+      "section": "AG SHOP BUILDING",
+      "name": "Install exterior threshold and locks",
+      "team": "Sonray / Jeff",
+      "startDate": null,
+      "durationDays": 1,
+      "status": "planned",
+      "order": 26
+    },
+    {
+      "id": "finish-solar-install",
+      "section": "AG SHOP BUILDING",
+      "name": "Finish Solar install",
+      "team": "Powercore",
+      "startDate": null,
+      "durationDays": 1,
+      "status": "planned",
+      "order": 27
+    },
+    {
+      "id": "tile-behind-utility-sink",
+      "section": "AG SHOP BUILDING",
+      "name": "Tile behind utility sink",
+      "team": "Alberto tile",
+      "startDate": null,
+      "durationDays": 1,
+      "status": "planned",
+      "order": 28
+    },
+    {
+      "id": "finish-plumbing",
+      "section": "AG SHOP BUILDING",
+      "name": "Finish plumbing",
+      "team": "Superior",
+      "startDate": null,
+      "durationDays": 1,
+      "status": "planned",
+      "order": 29
+    },
+    {
+      "id": "roll-up-door-start-ups-make-sure-we-have-power",
+      "section": "AG SHOP BUILDING",
+      "name": "Roll up door start ups / Make sure we have power",
+      "team": "Haney door",
+      "startDate": "2026-08-12",
+      "durationDays": 1,
+      "status": "confirmed",
+      "order": 30
+    },
+    {
+      "id": "roll-up-door-start-ups-make-sure-we-have-power-2",
+      "section": "AG SHOP BUILDING",
+      "name": "Roll up door start ups / Make sure we have power",
+      "team": "Haney door",
+      "startDate": "2026-09-21",
+      "durationDays": 1,
+      "status": "tentative",
+      "order": 31
+    },
+    {
+      "id": "final-inspection",
+      "section": "AG SHOP BUILDING",
+      "name": "Final inspection",
+      "team": "County",
+      "startDate": "2026-09-28",
+      "durationDays": 3,
+      "status": "tentative",
+      "order": 32
+    },
+    {
+      "id": "shed-roof-exterior-lights-5",
+      "section": "ORDERS",
+      "name": "Shed roof exterior lights , 5",
+      "team": "Steve",
+      "startDate": null,
+      "durationDays": 1,
+      "status": "planned",
+      "order": 33
+    },
+    {
+      "id": "wine-door-design",
+      "section": "ORDERS",
+      "name": "Wine Door design",
+      "team": "Tammi / Lisa",
+      "startDate": null,
+      "durationDays": 1,
+      "status": "planned",
+      "order": 34
+    }
+  ],
+  "deps": [
+    {
+      "predecessorId": "install-fire-riser-sprinkler",
+      "successorId": "hydro-fire-pump-room",
+      "depType": "FS",
+      "lagDays": 1
+    },
+    {
+      "predecessorId": "hydro-fire-pump-room",
+      "successorId": "fire-pump-start-up-test-flush",
+      "depType": "FS",
+      "lagDays": 1
+    },
+    {
+      "predecessorId": "fire-pump-start-up-test-flush",
+      "successorId": "the-fire-consultant-inpection",
+      "depType": "FS",
+      "lagDays": 1
+    },
+    {
+      "predecessorId": "fire-pump-start-up-test-flush",
+      "successorId": "inspection",
+      "depType": "SS",
+      "lagDays": 0
+    },
+    {
+      "predecessorId": "finish-grade-for-ac-and-concrete",
+      "successorId": "rebar-inspection",
+      "depType": "FS",
+      "lagDays": 0
+    },
+    {
+      "predecessorId": "finish-grade-west-side-heli-pad",
+      "successorId": "pour-heli-pad",
+      "depType": "FS",
+      "lagDays": 0
+    },
+    {
+      "predecessorId": "rebar-inspection",
+      "successorId": "pour-heli-pad",
+      "depType": "FS",
+      "lagDays": 0
+    },
+    {
+      "predecessorId": "pour-heli-pad",
+      "successorId": "paving",
+      "depType": "FS",
+      "lagDays": 0
+    },
+    {
+      "predecessorId": "paving",
+      "successorId": "concrete-entry-drive",
+      "depType": "FS",
+      "lagDays": 0
+    },
+    {
+      "predecessorId": "install-bathroom-door",
+      "successorId": "install-wainscot-in-bathroom-after-door-install",
+      "depType": "FS",
+      "lagDays": 0
+    },
+    {
+      "predecessorId": "interior-finish",
+      "successorId": "finish-electrical-exterior-lighitng",
+      "depType": "FS",
+      "lagDays": 0
+    },
+    {
+      "predecessorId": "inspection",
+      "successorId": "final-inspection",
+      "depType": "FS",
+      "lagDays": 27
+    },
+    {
+      "predecessorId": "finish-electrical-exterior-lighitng",
+      "successorId": "final-inspection",
+      "depType": "FS",
+      "lagDays": 0
+    },
+    {
+      "predecessorId": "finish-plumbing",
+      "successorId": "final-inspection",
+      "depType": "FS",
+      "lagDays": 0
+    },
+    {
+      "predecessorId": "paving",
+      "successorId": "final-inspection",
+      "depType": "FS",
+      "lagDays": 0
+    },
+    {
+      "predecessorId": "finish-solar-install",
+      "successorId": "final-inspection",
+      "depType": "FS",
+      "lagDays": 0
+    }
+  ]
+}

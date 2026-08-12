@@ -1,0 +1,355 @@
+/**
+ * The talk dock and the confirmation diff.
+ *
+ * The button is fixed to the bottom of the screen, sized and placed for a
+ * thumb — the client's one hard requirement about the phone. It sits above the
+ * safe-area inset so it clears the home bar on an iPhone, and it is the only
+ * element in the app that is allowed to be loud.
+ */
+
+.talk-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+  background: linear-gradient(to top, var(--sheet) 62%, transparent);
+  pointer-events: none;
+}
+.talk-dock > * {
+  pointer-events: auto;
+}
+
+.talk-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.talk-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  /* Comfortably past the 44px touch minimum: this is pressed with a glove on. */
+  min-height: 60px;
+  padding: 0 28px 0 22px;
+  border: 1px solid var(--mark-3);
+  border-radius: 999px;
+  background: var(--mark);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(207, 71, 24, 0.28);
+}
+.talk-btn:disabled {
+  opacity: 0.75;
+  cursor: default;
+}
+.talk-btn.live {
+  background: var(--ink);
+  border-color: #000;
+  box-shadow: 0 6px 20px rgba(22, 33, 43, 0.35);
+}
+
+.talk-label {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.talk-icon {
+  position: relative;
+  z-index: 2;
+}
+
+/* Loudness ring. Scaled from the meter, so it answers "is it hearing me" —
+   the question every push-to-talk button fails to answer. */
+.talk-ring {
+  position: absolute;
+  left: 12px;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  transform-origin: center;
+  transition: transform 90ms linear;
+  pointer-events: none;
+}
+
+.talk-type {
+  min-height: 44px;
+  background: var(--paper);
+  border: 1px solid var(--rule-2);
+}
+
+.talk-caption {
+  max-width: 560px;
+  margin: 0;
+  padding: 6px 12px;
+  border-radius: 3px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--ink-2);
+  text-align: center;
+}
+
+.talk-flash {
+  max-width: 560px;
+  padding: 8px 12px;
+  border-radius: 3px;
+  border: 1px solid var(--rule-2);
+  background: var(--paper);
+  font-size: 13px;
+}
+.talk-flash.good {
+  border-color: var(--booked);
+  background: var(--booked-2);
+  color: var(--booked);
+}
+
+/* ── Panel ──────────────────────────────────────────────────────────────────*/
+
+.talk-panel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 55;
+  max-height: 78dvh;
+  overflow-y: auto;
+  padding: 16px 14px calc(104px + env(safe-area-inset-bottom));
+  background: var(--paper);
+  border-top: 1px solid var(--rule-2);
+  box-shadow: 0 -10px 30px rgba(22, 33, 43, 0.1);
+}
+.talk-panel-inner {
+  max-width: 640px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.exchange .you {
+  margin: 0 0 3px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.exchange .you::before {
+  content: "“";
+}
+.exchange .you::after {
+  content: "”";
+}
+.exchange .them {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.45;
+}
+
+.talk-form {
+  display: flex;
+  gap: 8px;
+}
+.talk-form .input {
+  flex: 1;
+}
+
+/* ── The diff ───────────────────────────────────────────────────────────────
+   This is the screen that has to be readable at arm's length in sunlight, so
+   it is the one place the type gets bigger rather than smaller. */
+
+.proposal {
+  padding: 14px;
+  border: 1px solid var(--rule-2);
+  border-left: 3px solid var(--mark);
+  border-radius: 4px;
+  background: var(--paper-2);
+}
+
+.proposal-summary {
+  margin: 0 0 12px;
+  font-size: 15.5px;
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+.diff {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.diff li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+.diff li.cascaded {
+  padding-left: 12px;
+  opacity: 0.85;
+}
+
+.diff-tag {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  background: var(--sheet-off);
+  color: var(--ink-2);
+}
+.tag-moved {
+  background: var(--mark-2);
+  color: var(--mark-3);
+}
+.tag-new,
+.tag-booked,
+.tag-new-contact {
+  background: var(--booked-2);
+  color: var(--booked);
+}
+.tag-removed,
+.tag-unscheduled {
+  background: #f8dedc;
+  color: var(--blocked);
+}
+
+.diff-name {
+  flex: 1;
+  min-width: 140px;
+  font-size: 14.5px;
+  line-height: 1.3;
+}
+.diff-name .arrow {
+  margin-right: 5px;
+  color: var(--ink-3);
+}
+.diff-name em {
+  margin-left: 6px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-style: normal;
+  letter-spacing: 0.03em;
+  color: var(--ink-3);
+}
+
+.diff-dates {
+  font-size: 12px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.diff-dates b {
+  color: var(--ink);
+}
+.diff-dates i {
+  margin-left: 6px;
+  padding: 0 4px;
+  border-radius: 2px;
+  background: var(--mark-2);
+  color: var(--mark-3);
+  font-style: normal;
+  font-weight: 700;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.toggle input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--mark);
+}
+
+.recipients {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.recipient {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--sheet);
+  font-size: 13px;
+}
+.recipient .who {
+  flex: 1;
+  min-width: 0;
+}
+.recipient .who .num {
+  font-size: 11px;
+  color: var(--ink-2);
+}
+.recipient .peek {
+  min-height: 30px;
+  padding: 0 9px;
+  font-size: 10px;
+}
+.mail-body {
+  flex-basis: 100%;
+  margin: 4px 0 0;
+  padding: 9px 10px;
+  border-radius: 3px;
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+.proposal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+.proposal-actions .btn {
+  flex: 1;
+  min-height: 48px;
+}
+
+@media (min-width: 901px) {
+  .talk-dock {
+    left: auto;
+    right: 18px;
+    align-items: flex-end;
+    background: none;
+  }
+  .talk-panel {
+    left: auto;
+    right: 18px;
+    bottom: 92px;
+    width: 560px;
+    max-height: 70dvh;
+    border: 1px solid var(--rule-2);
+    border-radius: 5px;
+    padding-bottom: 16px;
+  }
+}

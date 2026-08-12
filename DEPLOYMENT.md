@@ -1,188 +1,93 @@
 # Deploying Foreman
 
-- Repo: <https://github.com/ezazahamad2003/calendar-app> (`main`)
-- Production: <https://calendar-app-nine-brown.vercel.app>
-- Supabase project: `iksrtkijgsemqhixgtoz` (ca-central-1)
+Vercel, one project, four environment variables. There is no database to
+provision and no OAuth app to register — both went away with the rewrite.
 
-Vercel redeploys on every push to `main`.
+## 1. Create a Blob store
 
----
+**Storage → Create → Blob**, connect it to the project. Vercel injects
+`BLOB_READ_WRITE_TOKEN` for you.
 
-## 1. Vercel environment variables
+This is not optional in production. A serverless function's filesystem is
+discarded between invocations, so without it every change is silently lost —
+the app refuses to start rather than let that happen quietly.
 
-**Settings → Environment Variables**, scope **Production**. `NEXT_PUBLIC_*` is
-inlined at build time and the rest is validated at boot by
-`src/instrumentation.ts`, so a missing value fails the deploy rather than
-starting up broken.
+## 2. Set the environment variables
 
-| Variable | Production value |
+| Variable | Value |
 |---|---|
-| `NEXT_PUBLIC_APP_URL` | `https://calendar-app-nine-brown.vercel.app` |
-| `NEXT_PUBLIC_SUPABASE_URL` | same as local |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | same as local |
-| `TOKEN_ENCRYPTION_KEY` | same as local (secret) |
-| `CRON_SECRET` | same as local (secret) |
-| `OPENAI_API_KEY` | same as local (secret) — voice + planner |
-| `SUPABASE_SECRET_KEY` | same as local (secret) — `provider_connections` is server-only |
-| `MS_CLIENT_ID` | same as local |
-| `MS_CLIENT_SECRET` | same as local (secret) |
-| `MS_TENANT_ID` | `common` |
-| `MS_SCOPES` | `offline_access User.Read Mail.Send Calendars.ReadWrite` |
-| `MS_REDIRECT_URI` | **differs from local:** `https://calendar-app-nine-brown.vercel.app/api/microsoft/callback` |
-| `GOOGLE_CLIENT_ID` | same as local |
-| `GOOGLE_CLIENT_SECRET` | same as local (secret) |
-| `GOOGLE_SCOPES` | `openid email https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/calendar.events` |
-| `GOOGLE_REDIRECT_URI` | **differs from local:** `https://calendar-app-nine-brown.vercel.app/api/google/callback` |
+| `NEXT_PUBLIC_APP_URL` | `https://your-domain.com` — no trailing slash |
+| `ADMIN_PASSCODE` | The passcode. At least 16 characters. |
+| `SESSION_SECRET` | `openssl rand -base64 32` |
+| `OPENAI_API_KEY` | For the microphone and the assistant |
 
-The two providers are independent. Set only the `MS_*` block and users see
-Outlook alone; set only `GOOGLE_*` and they see Gmail alone; set both and each
-user picks on **/connections**. Set neither and every send is *simulated*.
+Optional, for real email:
 
-> **No trailing slash on `NEXT_PUBLIC_APP_URL`.** It is concatenated with
-> `/auth/callback`.
+| Variable | Value |
+|---|---|
+| `RESEND_API_KEY` | From resend.com |
+| `MAIL_FROM` | An address on a domain **verified with Resend** |
+| `MAIL_REPLY_TO` | Where a subcontractor's reply should land |
 
-Do not set `NODE_ENV`, `VERCEL_ENV` or `VERCEL_URL` — the platform provides them.
+**Leave the mail variables unset until you mean it.** Without them the app
+composes every notification, records it, and shows it in History — but sends
+nothing. That is the right default for a schedule full of real subcontractors,
+and it lets you exercise the whole flow safely.
 
-`DATABASE_URL` / `DIRECT_URL` stay off Vercel: migrations only, run from your
-machine. The app reaches Supabase over HTTP and holds no Postgres connections.
+`FEATURE_SEND_EMAIL=false` is the same brake with the key already in place.
 
-**Changing any variable requires a redeploy.** Vercel does not apply them
-retroactively.
+### Choosing the passcode
 
----
+It is the only thing between a public URL and a button that emails
+subcontractors. `env.ts` enforces a 16-character floor; `auth.ts` throttles
+wrong guesses per instance, but that throttle is a nuisance to an attacker, not
+a defence. Use a passphrase he can say out loud and type once a year.
 
-## 2. Supabase — Authentication → URL Configuration
+## 3. Deploy
 
-Supabase only redirects to URLs on its allow-list; anything else is silently
-replaced with the Site URL, so users land on `localhost:3000` from their email.
-
-**Site URL**
-
-```
-https://calendar-app-nine-brown.vercel.app
+```bash
+vercel --prod
 ```
 
-**Redirect URLs**
+On first request the app seeds itself from `data/seed.json` and writes the
+document to Blob. From then on Blob is the source of truth and the seed is
+never read again.
 
-```
-https://calendar-app-nine-brown.vercel.app/auth/callback
-https://calendar-app-*-ezazahamad2003s-projects.vercel.app/auth/callback
-http://localhost:3000/auth/callback
-```
+## After deploying
 
-The wildcard covers preview deployments; `src/lib/app-url.ts` points a
-preview's magic links back at that same preview rather than production.
+1. Open the site, enter the passcode.
+2. Go to **Crew** and fill in email addresses. Every trade came off the wall
+   chart without one, and until an address is there that trade cannot be told
+   anything — the app never guesses. The page says how many are missing.
+3. Copy the read-only link from the same page and send it to the crew.
 
-**Authentication → Sign In / Providers → Email**: keep "Confirm email" **off**
-while testing, back **on** before real users.
+## Verifying a release
 
----
-
-## 3. Azure — Entra admin center → App registrations → your app
-
-**Authentication → Redirect URIs (Web)** — both, byte-exact:
-
-```
-http://localhost:3000/api/microsoft/callback
-https://calendar-app-nine-brown.vercel.app/api/microsoft/callback
+```bash
+pnpm typecheck && pnpm lint && pnpm test && pnpm build
 ```
 
-Entra compares the whole string. A trailing slash, or `http` where the
-registration says `https`, fails with `AADSTS50011`.
+`pnpm build` is not redundant with `typecheck`: it catches `"use server"`
+violations — a server-actions file may only export async functions — that `tsc`
+does not.
 
-**API permissions → Microsoft Graph → Delegated** — all four, all
-self-consentable (no admin consent needed):
+Then, against the deployment:
 
-```
-User.Read   Mail.Send   Calendars.ReadWrite   offline_access
-```
+- Say something that changes a date and check the diff before confirming.
+- Check **History** shows the change, the reason, and who was told.
+- Open the share link in a private window: chart visible, no microphone, no
+  Confirm, no addresses.
 
-**Supported account types** must include personal Microsoft accounts, matching
-`MS_TENANT_ID=common`.
+## Rotating things
 
-Publisher verification is not required to test with a personal Microsoft
-account; it only removes the unverified-publisher warning on the consent screen.
+- **The share link** — Crew → *Issue a new link*. The old URL 404s immediately.
+- **The passcode** — change `ADMIN_PASSCODE` and redeploy. Existing sessions
+  survive, because the cookie is signed with `SESSION_SECRET`, not the passcode.
+- **Every session** — change `SESSION_SECRET`. Everyone is signed out.
 
----
+## Recovering the schedule
 
-## 4. Google Cloud — console.cloud.google.com → your project
-
-**APIs & Services → Library** — enable both, or the calls 403 with
-`accessNotConfigured`:
-
-```
-Gmail API        Google Calendar API
-```
-
-**Credentials → Create credentials → OAuth client ID → Web application →
-Authorized redirect URIs** — both, byte-exact:
-
-```
-http://localhost:3000/api/google/callback
-https://calendar-app-nine-brown.vercel.app/api/google/callback
-```
-
-A mismatch fails with `redirect_uri_mismatch`, Google's equivalent of
-`AADSTS50011`.
-
-**OAuth consent screen → Scopes** — the two the app requests, plus identity:
-
-```
-openid   email
-https://www.googleapis.com/auth/gmail.send
-https://www.googleapis.com/auth/calendar.events
-```
-
-**`gmail.send` is a *sensitive* scope — this is the one real asymmetry with
-Outlook.** While the consent screen is in **Testing**, it works for up to 100
-users you list by hand under **Test users**, with no review. Publishing it so
-any customer can connect Gmail requires Google's app verification: a privacy
-policy, a verified domain, and a demo video, reviewed over weeks. Plan for that
-lead time before promising Gmail to a customer; Outlook has no equivalent gate.
-
-Test users' refresh tokens also expire after 7 days while the app is unpublished
-— a tester who returns the following week gets the reconnect banner, which is
-Google's behaviour, not a bug in the app.
-
----
-
-## 5. Smoke test
-
-1. `/` → 307 to `/login`
-2. Create an account → `/onboarding` → company + timezone → dashboard
-3. **Seed a demo project** → Gantt with six trades, a milestone and crew
-4. Drag a bar → dependents cascade, dates stay on working days
-5. Voice bar: type *"Push framing back two weeks and let Tom know"* → read the
-   diff → **Confirm**
-6. **Outbox** → the queued email is there → **Send**
-7. **Connections** in the left rail → **Connect Outlook** → consent → the card
-   reads *Connected as …* and the rail reads *Sending via Outlook*
-8. Outbox → send again → arrives in a real inbox
-9. Back to **Connections** → **Connect Gmail** → consent → both cards now show
-   connected, Outlook still badged *Sends from here*
-10. **Send from Gmail** on the Gmail card → the badge moves → Outbox header
-    reads *Sending via Gmail* → send → arrives from the Google account
-11. **Disconnect** Gmail → confirm → the badge falls back to Outlook
-
-Steps 1–6 work with no connection at all; sends are labelled *simulated*.
-Step 7 needs Azure, steps 9–11 need Google Cloud, and neither is required for
-the other.
-
-If step 5's email points at localhost, `NEXT_PUBLIC_APP_URL` is stale — set it
-and redeploy.
-
----
-
-## What is built
-
-Phases 0–8 are complete. The OAuth round-trip is the one thing never executed
-from a development machine — a consent screen cannot be clicked headlessly — so
-`tests/providers/providers.integration.test.ts` holds `describe.skip` tests
-naming exactly what to run against a live consented account, for either
-provider.
-
-Phase 8 added Google alongside Microsoft behind one interface
-(`src/lib/providers/client.ts`). The migration
-`20260810160000_provider_connections.sql` renames `ms_connections` to
-`provider_connections` and must be pushed (`pnpm db:push`) before the deploy
-that ships it — the app queries the new name.
+The whole thing is one JSON document. Download it from the Blob dashboard to
+take a backup; upload a replacement to roll back. It validates on read, so a
+malformed document fails at boot with a message naming the problem rather than
+half-loading.

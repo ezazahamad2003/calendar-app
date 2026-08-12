@@ -1,20 +1,16 @@
 import { z } from "zod";
 
 /**
- * Environment validation for Foreman.
+ * Environment validation.
  *
- * Every variable the app reads is declared here and nowhere else. If a new
- * variable is needed, add it to `.env.example` first, then here. See SPEC §1.
+ * Every variable the app reads is declared here and nowhere else. Validation
+ * runs once at boot via `src/instrumentation.ts`, and a missing or malformed
+ * value aborts with one message listing every problem — you fix them all in a
+ * single pass rather than one restart at a time.
  *
- * Validation runs once at server boot via `src/instrumentation.ts`. Missing or
- * malformed *required* vars abort boot with a single message listing every
- * problem — you fix them all in one pass, not one reboot at a time.
- *
- * Phasing: variables belonging to features not yet wired (Supabase in Phase 1,
- * Microsoft Graph in Phase 7) are optional-but-format-checked. They are not
- * required to boot Phase 0, but if you fill them in with a malformed value you
- * hear about it immediately. Access them through `requireEnv()` at the point of
- * use so a feature that needs an unset var fails with a clear, named error.
+ * The list is short now by design. Dropping Supabase, both OAuth providers and
+ * the calendar sync took nineteen variables with them; what is left is a
+ * passcode, a signing secret, and two optional API keys.
  */
 
 const trueish = new Set(["1", "true", "yes", "on"]);
@@ -24,136 +20,113 @@ const boolFlag = (def: boolean) =>
     .optional()
     .transform((v) => (v == null || v === "" ? def : trueish.has(v.toLowerCase())));
 
-/** Present and non-empty. Empty string in `.env` counts as absent. */
-const requiredString = (label: string) =>
-  z
-    .string({ error: `${label} is required` })
-    .trim()
-    .min(1, `${label} is required`);
-
-/**
- * Validated only if provided. An empty string in `.env` (`MS_CLIENT_ID=`) is
- * treated as absent, not as an invalid zero-length value — so unset Phase-7
- * vars don't block Phase-0 boot.
- */
+/** Validated only if provided. `FOO=` in a .env file counts as absent. */
 const optionalString = () =>
   z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
     z.string().trim().min(1).optional(),
   );
 
+const isProduction = process.env.NODE_ENV === "production";
+
 /**
- * `.env.example` fills unknown values with `xxxx` runs and a literal `PASSWORD`
- * inside the Postgres URLs. Copying the example across and missing a line is the
- * most common setup mistake, and a half-filled value fails far from its cause —
- * a 401 from Supabase, a DNS error on the fake `aws-0-region` host — so catch it
- * at boot instead.
+ * The passcode is the only thing between a public URL and a button that emails
+ * subcontractors, so it has a floor. Sixteen characters of passphrase is easy
+ * to say out loud and to type on a phone once a year, and far past what the
+ * per-instance throttle in `auth.ts` could be relied on to protect.
  */
-const PLACEHOLDER = /xxxx|:PASSWORD@|aws-0-region/i;
-
-const notPlaceholder = (v: unknown) => typeof v !== "string" || !PLACEHOLDER.test(v);
-
-const placeholderMessage = (label: string) =>
-  `${label} is still the .env.example placeholder — replace it with the real value`;
-
-/** Optional, but if set must be a real `postgresql://` connection string. */
-const postgresUrl = (label: string) =>
-  optionalString()
-    .pipe(
-      z
-        .string()
-        .regex(/^postgres(ql)?:\/\/./, `${label} must be a postgresql:// connection string`)
-        .optional(),
-    )
-    .refine(notPlaceholder, placeholderMessage(label));
-
-const serverSchema = z.object({
-  // ── App (required to boot) ────────────────────────────────────────────────
-  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  NEXT_PUBLIC_APP_URL: requiredString("NEXT_PUBLIC_APP_URL").pipe(z.url()),
-
-  // 32 raw bytes, base64-encoded → AES-256-GCM key. `openssl rand -base64 32`.
-  TOKEN_ENCRYPTION_KEY: requiredString("TOKEN_ENCRYPTION_KEY").refine(
-    (v) => tryDecodeBytes(v) === 32,
-    "TOKEN_ENCRYPTION_KEY must be 32 bytes, base64-encoded (openssl rand -base64 32)",
-  ),
-  CRON_SECRET: requiredString("CRON_SECRET"),
-
-  // ── Supabase (Phase 1+) ───────────────────────────────────────────────────
-  NEXT_PUBLIC_SUPABASE_URL: optionalString()
-    .pipe(z.url().optional())
-    .refine(notPlaceholder, placeholderMessage("NEXT_PUBLIC_SUPABASE_URL")),
-  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: optionalString().refine(
-    notPlaceholder,
-    placeholderMessage("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
-  ),
-  SUPABASE_SECRET_KEY: optionalString().refine(
-    notPlaceholder,
-    placeholderMessage("SUPABASE_SECRET_KEY"),
-  ),
-  DATABASE_URL: postgresUrl("DATABASE_URL"),
-  DIRECT_URL: postgresUrl("DIRECT_URL"),
-
-  // ── OpenAI (Phase 5+) ─────────────────────────────────────────────────────
-  OPENAI_API_KEY: optionalString().refine(
-    notPlaceholder,
-    placeholderMessage("OPENAI_API_KEY"),
-  ),
-  OPENAI_STT_MODEL: z.string().trim().min(1).default("whisper-1"),
-  OPENAI_PLANNER_MODEL: z.string().trim().min(1).default("gpt-4o"),
-
-  // ── Microsoft Graph (Phase 7) ─────────────────────────────────────────────
-  MS_CLIENT_ID: optionalString(),
-  MS_CLIENT_SECRET: optionalString(),
-  MS_TENANT_ID: z.string().trim().min(1).default("common"),
-  MS_REDIRECT_URI: optionalString().pipe(z.url().optional()),
-  MS_SCOPES: z
+const passcode = optionalString().pipe(
+  z
     .string()
-    .trim()
-    .min(1)
-    .default("offline_access User.Read Mail.Send Calendars.ReadWrite"),
+    .min(16, "ADMIN_PASSCODE must be at least 16 characters")
+    .optional(),
+);
 
-  // ── Google (Gmail + Calendar, Phase 8) ────────────────────────────────────
-  // Peer of the Microsoft block above, same optional-but-validated treatment:
-  // an org that only uses Outlook leaves these unset and never sees Google in
-  // the UI, and vice versa.
-  GOOGLE_CLIENT_ID: optionalString(),
-  GOOGLE_CLIENT_SECRET: optionalString(),
-  GOOGLE_REDIRECT_URI: optionalString().pipe(z.url().optional()),
-  // `openid email` identifies the connected account; gmail.send and
-  // calendar.events are the narrowest scopes that still let us send mail and
-  // write events. Deliberately not gmail.readonly or calendar (full) — those
-  // are *restricted* scopes and drag in Google's security-assessment review.
-  GOOGLE_SCOPES: z
-    .string()
-    .trim()
-    .min(1)
-    .default(
-      "openid email https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/calendar.events",
-    ),
+const serverSchema = z
+  .object({
+    NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 
-  // ── Feature flags ─────────────────────────────────────────────────────────
-  FEATURE_CONFIRM_BEFORE_SEND: boolFlag(true),
-  FEATURE_INVITE_ATTENDEES: boolFlag(true),
-  FEATURE_TWO_WAY_CALENDAR_SYNC: boolFlag(false),
-});
+    /** Absolute, and used to build the share link that gets texted to the crew. */
+    NEXT_PUBLIC_APP_URL: z
+      .string()
+      .trim()
+      .min(1, "NEXT_PUBLIC_APP_URL is required")
+      .pipe(z.url()),
+
+    // ── Access ────────────────────────────────────────────────────────────────
+    // Optional here so a fresh clone runs `pnpm dev` with no setup; required in
+    // production by the refinement below, because an ungated deployment is an
+    // open Send button.
+    ADMIN_PASSCODE: passcode,
+
+    /** Signs the "remember this device" cookie. Rotating it signs everyone out. */
+    SESSION_SECRET: z
+      .string()
+      .trim()
+      .min(32, "SESSION_SECRET must be at least 32 characters (openssl rand -base64 32)")
+      .default("dev-only-insecure-session-secret-do-not-ship-abcdef"),
+
+    // ── Storage ───────────────────────────────────────────────────────────────
+    // Unset locally: the store falls back to `data/schedule.json`. Required on
+    // Vercel, where the filesystem does not persist — `driver.ts` says so with
+    // instructions rather than losing writes quietly.
+    BLOB_READ_WRITE_TOKEN: optionalString(),
+
+    // ── Voice ─────────────────────────────────────────────────────────────────
+    OPENAI_API_KEY: optionalString(),
+    OPENAI_STT_MODEL: z.string().trim().min(1).default("whisper-1"),
+    OPENAI_PLANNER_MODEL: z.string().trim().min(1).default("gpt-4o"),
+
+    // ── Email ─────────────────────────────────────────────────────────────────
+    // Unset means the console driver: notifications are composed, recorded and
+    // shown in the app, but nothing leaves the building. That is the right
+    // default for a schedule full of real subcontractors.
+    RESEND_API_KEY: optionalString(),
+    /** Must be on a domain verified with Resend, or every send bounces. */
+    MAIL_FROM: optionalString(),
+    /** Replies from subs should reach a person, not the sending domain. */
+    MAIL_REPLY_TO: optionalString(),
+
+    // ── Feature flags ─────────────────────────────────────────────────────────
+    /** Off sends nothing regardless of key — the switch for a dry run on real data. */
+    FEATURE_SEND_EMAIL: boolFlag(true),
+  })
+  .superRefine((env, ctx) => {
+    if (!isProduction) return;
+
+    if (!env.ADMIN_PASSCODE) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["ADMIN_PASSCODE"],
+        message:
+          "ADMIN_PASSCODE is required in production. Without it the schedule is " +
+          "editable, and its Send button usable, by anyone who finds the URL.",
+      });
+    }
+    if (env.SESSION_SECRET.startsWith("dev-only-")) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["SESSION_SECRET"],
+        message:
+          "SESSION_SECRET is still the built-in development value. Generate one " +
+          "with `openssl rand -base64 32`.",
+      });
+    }
+    if (env.RESEND_API_KEY && !env.MAIL_FROM) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["MAIL_FROM"],
+        message:
+          "MAIL_FROM is required when RESEND_API_KEY is set — Resend rejects a " +
+          "send with no verified from-address.",
+      });
+    }
+  });
 
 export type ServerEnv = z.infer<typeof serverSchema>;
 
-function tryDecodeBytes(base64: string): number | null {
-  try {
-    return Buffer.from(base64, "base64").length;
-  } catch {
-    return null;
-  }
-}
-
 let cached: ServerEnv | null = null;
 
-/**
- * Parse and cache the server environment. Throws a single aggregated error
- * listing every missing/invalid variable. Safe to call repeatedly.
- */
 export function getEnv(): ServerEnv {
   if (cached) return cached;
 
@@ -163,8 +136,8 @@ export function getEnv(): ServerEnv {
       .map((i) => `  • ${i.path.join(".") || "(root)"}: ${i.message}`)
       .join("\n");
     throw new Error(
-      `Invalid environment configuration. Fix the following in your .env, ` +
-        `then restart:\n${problems}\n\nSee .env.example for the full list.`,
+      `Invalid environment configuration. Fix the following, then restart:\n${problems}\n\n` +
+        `See .env.example for the full list.`,
     );
   }
 
@@ -174,16 +147,21 @@ export function getEnv(): ServerEnv {
 
 /**
  * Read a variable that is optional at boot but required by the feature calling
- * it (e.g. a Supabase key inside a DB call). Throws a clear, named error naming
- * the variable and what to do, instead of failing deep in a client library.
+ * it. Fails with a named, actionable error instead of a 401 from someone
+ * else's API.
  */
 export function requireEnv<K extends keyof ServerEnv>(key: K): NonNullable<ServerEnv[K]> {
   const value = getEnv()[key];
   if (value == null || value === "") {
     throw new Error(
-      `${String(key)} is not set. This feature needs it — add it to your .env ` +
-        `(see .env.example) and restart.`,
+      `${String(key)} is not set, and this feature needs it. ` +
+        `Add it to your environment (see .env.example) and restart.`,
     );
   }
   return value as NonNullable<ServerEnv[K]>;
+}
+
+/** Tests mutate `process.env` and need the cache dropped. */
+export function resetEnvCache(): void {
+  cached = null;
 }

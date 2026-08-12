@@ -1,15 +1,19 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { requireMembership } from "@/lib/auth/dal";
+import { isOwner } from "@/lib/auth";
 import { getEnv, requireEnv } from "@/lib/env";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Audio blob → transcript, via Whisper (SPEC §5). A route handler rather than
- * a server action because the payload is binary multipart, which actions
- * handle poorly. Auth is the same DAL gate every mutation uses.
+ * Audio blob → transcript, via Whisper. A route handler rather than a server
+ * action because the payload is binary multipart, which actions handle poorly.
+ *
+ * Gated on the passcode like every other write path. It is not a write, but it
+ * spends money per call and it is the front door to the one part of the app
+ * that changes things — someone holding only the read-only link must not reach
+ * it. The proxy does not cover `/api`, so this check is the only one.
  *
  * Push-to-talk clips are seconds long; the 15 MB cap is far above any real
  * clip and far below the platform's own request limit, so a runaway recording
@@ -18,10 +22,11 @@ export const dynamic = "force-dynamic";
 const MAX_BYTES = 15 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
-  try {
-    await requireMembership();
-  } catch {
-    return NextResponse.json({ error: "Sign in first." }, { status: 401 });
+  if (!(await isOwner())) {
+    return NextResponse.json(
+      { error: "Enter the passcode before using the microphone." },
+      { status: 401 },
+    );
   }
 
   const form = await request.formData().catch(() => null);

@@ -1,78 +1,85 @@
 ---
 name: foreman-qa
-description: Test Foreman end to end — static checks, the schedule engine, RLS, and the assistant's behaviour against a corpus of transcripts. Use when asked to test the app, run QA, check a release, verify the assistant plans correctly, or investigate a report that it "did the wrong thing".
+description: Test Foreman end to end — static checks, the schedule engine, the access gate, and the assistant's behaviour against a corpus of transcripts. Use when asked to test the app, run QA, check a release, verify the assistant plans correctly, or investigate a report that it "did the wrong thing".
 ---
 
 # Testing Foreman
 
-Foreman is a construction scheduling app whose headline feature is an assistant
-you talk to. Most of its bugs have not been crashes — they have been the
-assistant confidently doing the wrong thing and saying it did the right thing.
-Test accordingly: static checks catch almost none of the interesting failures.
+Foreman is a construction schedule for one job, driven by an assistant you talk
+to. Most of its bugs have not been crashes — they have been the assistant
+confidently doing the wrong thing and saying it did the right thing, or the
+schedule quietly reshaping itself. Test accordingly: static checks catch almost
+none of the interesting failures.
 
 ## The invariants
 
-These are the properties that must hold. A violation of any one is a P1
-regardless of how small the diff that caused it.
+A violation of any one is a P1 regardless of how small the diff that caused it.
 
-1. **Nothing writes without a confirm.** The assistant proposes; `applyPlan`
-   is the only thing that writes, and only the Confirm button calls it. No
-   tool may mutate. If a tool ever gains a write, that is the bug.
-2. **The assistant never claims a completed action.** It says "that'll move
-   framing", never "I've moved framing". Nothing is real until confirmed.
-3. **It never describes a change it cannot express.** If there is no operation
-   for what was asked, it must say so, not reach for the nearest one. This is
-   what made "rename the job" create a second job.
-4. **Adding is not moving.** "Add plumbing today" creates a task even when a
-   similarly-named one exists. Only an explicit reference to an existing task
-   plus a date change may move one.
-5. **Ids are validated in code**, not trusted from the model. A hallucinated
-   id fails; it never silently skips or invents a row.
+1. **Nothing writes without a confirm.** `commitPlan()` is the only writer, and
+   only the Confirm button reaches it. The assistant has exactly one tool and it
+   returns a proposal. If a tool ever gains a write, that is the bug.
+2. **The assistant never claims a completed action.** "That'll move the
+   downspouts", never "I've moved the downspouts". Nothing is real until
+   confirmed. It also must not ask "shall I proceed?" — the app asks, with a
+   diff, and asking twice makes him say it twice.
+3. **It never describes a change it cannot express**, and never names an
+   activity that is not in its context. Inventing a consequence in prose is
+   worse than silence, because he reads the line and not the diff.
+4. **Adding is not moving.** "Add downspouts Tuesday" creates an activity even
+   when a similarly-named one exists. Only an explicit reference to an existing
+   activity plus a date change may move one.
+5. **Ids are validated in code**, not trusted from the model. A hallucinated id
+   fails the *whole* plan; it never silently skips one operation.
 6. **The preview comes from the schedule engine**, never from the model. Every
-   date shown before confirming is `cascade()`'s output.
-7. **`provider_connections` is unreachable by the client role.** RLS enabled,
-   zero policies, grants revoked. Never add a policy.
-8. **No notification about an undated task**, and one calendar event per task,
-   not one per assignee.
+   date shown before confirming is `applyOperations` → `cascade()`.
+7. **An undated activity is never given a date by a cascade.** Half the chart is
+   undated on purpose. Dating it from a predecessor is a guess that mails a
+   subcontractor a booking nobody made.
+8. **The seed is a fixed point.** Cascading a schedule nobody touched moves
+   nothing. `tests/playbook.test.ts` asserts it.
+9. **No notification about an undated activity**, no guessed email address, and
+   one message per trade rather than one per activity.
+10. **The share page cannot write and cannot spend money.** No microphone, no
+    Confirm, no addresses, no history. It does not import the assistant at all.
 
 ## Layers, cheapest first
 
-Run in this order. Stop and report as soon as a layer fails — a broken build
-makes behavioural results meaningless.
+Stop and report as soon as a layer fails — a broken build makes behavioural
+results meaningless.
 
 ```bash
 pnpm typecheck
 pnpm lint
-pnpm vitest run --exclude "tests/rls/**"
+pnpm test
 pnpm build
 ```
 
-`pnpm build` is not redundant with typecheck: it catches `"use server"`
+`pnpm build` is not redundant with `typecheck`: it catches `"use server"`
 violations (a server-actions file may only export async functions) that `tsc`
 does not.
 
-RLS tests need a database and will reset it — **never run them against
-production**:
-
-```bash
-pnpm test:rls
-```
+There is no database and no RLS suite any more. `tests/store.test.ts` covers
+what the database used to: a malformed document, a broken reference, and two
+writers racing.
 
 ## Behavioural testing — the part that matters
 
-The assistant's behaviour is where the real defects live, and it cannot be
-tested by running the loop (that needs a live model and costs money per case).
-Test it at the seam instead.
+The assistant's behaviour is where the real defects live, and running the loop
+needs a live model and costs money per case. Test at the seam instead.
 
-**What you can test without a model:** take a transcript and the plan a model
-*would* return, and assert the app handles it correctly — `planSchema` parsing,
-`validatePlanIds` accepting or rejecting, `buildPreview` producing the right
-diff. This catches every class of bug except "the model chose wrong".
+**Testable without a model:** take a transcript and the plan a model *would*
+return, and assert the app handles it correctly — `planSchema` parsing,
+`validatePlan` accepting or rejecting, `buildPreview` producing the right diff,
+`composeNotifications` deciding who is told. That catches every class of bug
+except "the model chose wrong". These live in `tests/safety.test.ts`,
+`tests/notify.test.ts` and `tests/playbook.test.ts`, off the shared fixture in
+`tests/fixture.ts` — which is the client's real chart, with its real awkward
+shapes, not a synthetic toy.
 
-**What needs a model:** whether the model picks `create_task` over `move_task`.
-Only a human running the app catches this. Your job for these is to produce a
-precise, checkable script — the exact words to say and the exact expected
-outcome — not to run it.
+**Needs a model:** whether it picks `add_activity` over `move_activity`, whether
+it captures a reason, whether it proposes instead of asking permission. Only a
+person running the app catches these. Produce a precise, checkable script — the
+exact words to say and the exact expected outcome — rather than running it.
 
 ### Writing a behavioural case
 
@@ -80,58 +87,46 @@ Every case needs all four parts. A case without an expected *rejection* is half
 a case.
 
 ```
-Say:      "add plumbing for Chico today"
-Context:  a task named "Plumberry" already exists on Chico, dated Fri 14 Aug
-Expect:   ONE create_task on Chico, dated today. Diff line tagged "New".
-Must not: move, shift or rename Plumberry. No line tagged "Moved".
+Say:      "add downspouts for Tuesday"
+Context:  "Install Downspouts" already exists, dated Wed 26 Aug
+Expect:   ONE add_activity, dated Tuesday. Diff line tagged "New".
+Must not: move, shift or rename the existing one. No line tagged "Moved".
 ```
 
-Bias every case toward the destructive misreading. The interesting question is
-never "does it work" — it is "when it misunderstands, does it fail toward the
-harmless option". Creating a duplicate is harmless; silently moving a crew
-booking wastes a day on site.
-
-### Where cases live
-
-`tests/agent/cases.md`, grouped by the invariant each one defends. If it does
-not exist, create it. When a real bug is found, add the case that would have
-caught it *before* fixing the bug.
-
-Each case is tagged `[auto]` or `[manual]`. The `[auto]` ones are real tests
-beside it — `plan-ids.test.ts` (the validator) and `preview.test.ts` (the diff
-builder), off the shared fixture in `fixture.ts`. Anything assertable without a
-live model belongs there, not just in prose. `buildPreview` lives in
-`src/lib/voice/preview.ts` rather than `actions.ts` precisely so it can be
-imported by a test.
+Bias every case toward the destructive misreading. The question is never "does
+it work" — it is "when it misunderstands, does it fail toward the harmless
+option". A duplicate row is harmless; silently moving a crew booking wastes a
+day on site.
 
 ## Manual passes that need a person
 
 Flag these clearly rather than attempting them:
 
-- **The microphone.** Silence detection, auto-stop, live captions. Needs a real
-  mic and a real consent prompt. Captions are Chrome/Edge only — verify Safari
-  and Firefox degrade to the meter and stages rather than breaking.
-- **OAuth.** Consent screens cannot be clicked headlessly. Test Outlook *and*
-  Gmail; they share one code path, so a break in it breaks both.
-- **Calendar writes.** Confirm a dated task, check the event appears, then move
-  the task and check the *same* event moved rather than a second appearing.
-  The update path is the one most likely to be wrong.
+- **The microphone.** Press-to-start, press-to-stop, silence auto-stop, the
+  level ring, live captions. Needs a real mic and a real consent prompt.
+  Captions are Chrome/Edge only — check Safari and Firefox fall back to the
+  meter rather than breaking.
+- **Real email.** With `RESEND_API_KEY` set, a confirmed change sends for real.
+  Use an address you control. Check the reason appears above the dates.
+- **The phone.** The chart is replaced by the agenda below 900px. Check there is
+  no horizontal page scroll at 375px and the talk button clears the home bar.
 
 ## Safety when testing against a real deployment
 
-Confirming a plan **sends real email** and **writes to a real calendar**.
+Confirming a plan **sends real email** if `RESEND_API_KEY` is set.
 
+- Unset it, or set `FEATURE_SEND_EMAIL=false`, and everything is composed,
+  recorded and shown without sending. Prefer that.
 - Use contacts whose addresses you control. Never a real subcontractor.
-- Prefer a throwaway org over the one with real jobs in it.
-- Anything under `/outbox` marked queued has not sent yet; sent has.
 - Reads are free — every question is safe to ask. Only Confirm has effects.
+- History shows exactly what was sent, what was skipped, and why.
 
 ## Reporting
 
-For each failure give: what you said, what you expected, what happened, and
-which invariant it violates. If you can point at the file and line, do. Do not
-fix anything unless asked — a QA pass that also rewrites the code cannot be
-trusted about what it found.
+For each failure: what you said, what you expected, what happened, and which
+invariant it violates. Point at the file and line where you can. Do not fix
+anything unless asked — a QA pass that also rewrites the code cannot be trusted
+about what it found.
 
 State plainly what you did not test. "The mic is untested" is a useful result;
 silence about it is not.

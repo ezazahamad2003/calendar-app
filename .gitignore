@@ -40,3 +40,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# The live local store. `data/seed.json` and `data/master-plan.json` are the
+# committed inputs; this is the working document the app writes to on disk when
+# no Blob token is set, and it is per-developer runtime state.
+/data/schedule.json
+/data/schedule.json.*.tmp
