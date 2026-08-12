@@ -1,6 +1,8 @@
 import { Assistant } from "@/components/assistant";
 import { ChartView } from "@/components/chart-view";
 import { TitleBlock } from "@/components/title-block";
+import { SetupScreen } from "@/components/setup-screen";
+import { setupProblems } from "@/lib/setup";
 import { readDoc } from "@/lib/store";
 
 /**
@@ -24,6 +26,10 @@ export default async function Page({
 }: {
   searchParams: Promise<{ from?: string }>;
 }) {
+
+  // A deployment without its storage renders instructions, not a 500.
+  const problems = setupProblems();
+  if (problems.length > 0) return <SetupScreen problems={problems} />;
 
   const { from } = await searchParams;
   const doc = await readDoc();

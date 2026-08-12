@@ -443,3 +443,67 @@ select {
   color: var(--ink-2);
 }
 
+
+/* ── Setup screen ───────────────────────────────────────────────────────────
+   Shown when a deployment is missing a prerequisite. The reader is in the
+   Vercel dashboard trying to work out what to click, so it is plain and
+   specific rather than decorative. */
+
+.setup {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: 24px;
+}
+.setup-card {
+  width: 100%;
+  max-width: 460px;
+  padding: 28px 24px;
+  background: var(--paper);
+  border: 1px solid var(--rule-2);
+  border-radius: 5px;
+}
+.setup-card h1 {
+  margin: 0 0 6px;
+  font-family: var(--mono);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.setup-card p {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.setup-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.setup-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--mark);
+  background: var(--mark-2);
+  border-radius: 0 3px 3px 0;
+}
+.setup-list strong {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--mark-3);
+}
+.setup-list span {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}

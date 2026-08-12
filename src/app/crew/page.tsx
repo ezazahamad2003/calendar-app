@@ -2,6 +2,8 @@ import { ContactRow } from "./contact-row";
 import { ShareCard } from "./share-card";
 import { TitleBlock } from "@/components/title-block";
 import { getAppOrigin } from "@/lib/app-url";
+import { SetupScreen } from "@/components/setup-screen";
+import { setupProblems } from "@/lib/setup";
 import { readDoc } from "@/lib/store";
 
 export const metadata = { title: "Crew — Foreman" };
@@ -28,6 +30,10 @@ export const dynamic = "force-dynamic";
  * be discovered when a crew turns up on the wrong day.
  */
 export default async function CrewPage() {
+  // A deployment without its storage renders instructions, not a 500.
+  const problems = setupProblems();
+  if (problems.length > 0) return <SetupScreen problems={problems} />;
+
   const doc = await readDoc();
   const jobCount = new Map<string, number>();
   for (const task of doc.tasks) {

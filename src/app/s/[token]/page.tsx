@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { ChartView } from "@/components/chart-view";
 import { TitleBlock } from "@/components/title-block";
 import { shareTokenMatches } from "@/lib/auth";
+import { SetupScreen } from "@/components/setup-screen";
+import { setupProblems } from "@/lib/setup";
 import { readDoc } from "@/lib/store";
 
 export const metadata = {
@@ -44,6 +46,10 @@ export default async function SharedPage({
 }) {
   const { token } = await params;
   const { from } = await searchParams;
+  // A deployment without its storage renders instructions, not a 500.
+  const problems = setupProblems();
+  if (problems.length > 0) return <SetupScreen problems={problems} />;
+
   const doc = await readDoc();
 
   // Constant-time, and a wrong token is indistinguishable from a switched-off

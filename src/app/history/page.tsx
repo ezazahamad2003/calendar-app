@@ -1,5 +1,7 @@
 import { TitleBlock } from "@/components/title-block";
 import { humanRange } from "@/lib/format-date";
+import { SetupScreen } from "@/components/setup-screen";
+import { setupProblems } from "@/lib/setup";
 import { readDoc } from "@/lib/store";
 import type { Notification } from "@/lib/store/types";
 
@@ -26,6 +28,10 @@ export const dynamic = "force-dynamic";
  * with no address on file, a send that was deliberately turned off.
  */
 export default async function HistoryPage() {
+  // A deployment without its storage renders instructions, not a 500.
+  const problems = setupProblems();
+  if (problems.length > 0) return <SetupScreen problems={problems} />;
+
   const doc = await readDoc();
 
   return (
