@@ -31,8 +31,8 @@ export function setupProblems(): SetupProblem[] {
         "The schedule is one JSON document and Vercel Blob is where it lives. " +
         "A serverless function's filesystem is thrown away between requests, so " +
         "without this every change would be lost. In the Vercel dashboard: " +
-        "Storage → Create → Blob, connect it to this project, then redeploy. " +
-        "The token is injected for you.",
+        "Storage → Create → Blob, set Access to Private, connect it to this " +
+        "project, then redeploy. The token is injected for you.",
     });
   }
 

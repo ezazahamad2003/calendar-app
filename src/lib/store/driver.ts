@@ -33,6 +33,17 @@ export interface StoreDriver {
 /** The blob's pathname, and the local file's name. */
 const DOC_KEY = "schedule.json";
 
+/**
+ * The store must be created **Private** in the Vercel dashboard, and this must
+ * agree with it.
+ *
+ * The document carries every subcontractor's email address. A public blob is
+ * readable by anyone who ever sees its URL, and nothing needs that: the app is
+ * the only reader and it reads server-side with the token. Public would buy
+ * nothing and leak the crew's contact details.
+ */
+const BLOB_ACCESS = "private" as const;
+
 // ── Local file ────────────────────────────────────────────────────────────────
 
 export class FileDriver implements StoreDriver {
@@ -73,35 +84,39 @@ export class BlobDriver implements StoreDriver {
   }
 
   async read(): Promise<StoredDoc> {
-    const { head } = await import("@vercel/blob");
+    const { get } = await import("@vercel/blob");
 
-    let url: string;
-    try {
-      const meta = await head(DOC_KEY, { token: this.token });
-      url = meta.url;
-    } catch (err) {
-      // `head` throws BlobNotFoundError before the first write. That is the
-      // empty state, not a failure — the caller seeds.
-      if (err instanceof Error && err.name === "BlobNotFoundError") return null;
-      throw err;
+    // By pathname, not URL: `get` resolves the store from the token, so there
+    // is no need to look the URL up first.
+    //
+    // `useCache: false` is load-bearing. Blob reads are served through a CDN,
+    // and this document is read again immediately after every write — a cached
+    // copy would read as the change having been discarded. This is the SDK's
+    // own way of going to origin, and more reliable than putting `no-store` on
+    // a hand-rolled fetch.
+    const result = await get(DOC_KEY, {
+      access: BLOB_ACCESS,
+      useCache: false,
+      token: this.token,
+    });
+
+    // Null before the first write — the empty state, not a failure. The caller
+    // seeds.
+    if (!result) return null;
+    if (result.statusCode !== 200) {
+      throw new Error(
+        `Could not read the schedule from Blob storage (HTTP ${result.statusCode}).`,
+      );
     }
 
-    // Blob URLs sit behind a CDN, and the CDN will happily hand back the
-    // schedule as it was several minutes ago. For a store that is read
-    // immediately after every write, that reads as changes being discarded.
-    const response = await fetch(url, { cache: "no-store" });
-    if (response.status === 404) return null;
-    if (!response.ok) {
-      throw new Error(`Could not read the schedule from Blob storage (${response.status}).`);
-    }
-    return { body: await response.text() };
+    return { body: await new Response(result.stream).text() };
   }
 
   async write(body: string): Promise<void> {
     const { put } = await import("@vercel/blob");
     await put(DOC_KEY, body, {
       token: this.token,
-      access: "public",
+      access: BLOB_ACCESS,
       contentType: "application/json",
       // Same pathname every time — this is one mutable document, not a history
       // of uploads. Without this the SDK appends a random suffix and every
