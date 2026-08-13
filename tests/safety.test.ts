@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { soundsLikeACommitment } from "@/lib/assistant/agent";
 import { planSchema } from "@/lib/ops/schema";
 import { validatePlan } from "@/lib/ops/validate";
 import { buildPreview } from "@/lib/ops/preview";
@@ -250,5 +251,43 @@ describe("every change is visible before it is confirmed", () => {
       ],
     });
     expect(preview.empty).toBe(true);
+  });
+});
+
+describe("the commitment backstop", () => {
+  // The most damaging thing the assistant can do is say "I'll add downspouts
+  // for Tuesday" without calling propose_changes: he puts the phone down and
+  // nothing has happened. The prompt forbids it; this is what catches it when
+  // the model does it anyway.
+  it("spots a reply that promises a change", () => {
+    for (const reply of [
+      "I'll add Install Downspouts for Tuesday, August 18th.",
+      "I've moved the fire riser back two days.",
+      "I have pushed the downspouts.",
+      "I will book Whirco for Friday.",
+      "I'm adding the punch list walk now.",
+      "Moved it to Tuesday.",
+      "Done.",
+      "Consider it done.",
+      "That's booked.",
+    ]) {
+      expect(soundsLikeACommitment(reply), reply).toBe(true);
+    }
+  });
+
+  it("leaves proposals and answers alone", () => {
+    for (const reply of [
+      "That'll push the fire riser back two days.",
+      "That would move the downspouts to Tuesday.",
+      "Here's what that would change — have a look before confirming.",
+      "The downspouts are booked for Wed 26 Aug with Solano Seamless.",
+      "Nothing is scheduled for that week.",
+      "Harvpro has no email address on file.",
+      // A question is a different failure, and the prompt handles it.
+      "Which roll up door did you mean — the 12th or the 21st?",
+      "Shall I move it?",
+    ]) {
+      expect(soundsLikeACommitment(reply), reply).toBe(false);
+    }
   });
 });

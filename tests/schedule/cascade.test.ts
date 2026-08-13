@@ -134,15 +134,15 @@ describe("cascade", () => {
   });
 
   it("honours negative lag (a lead)", () => {
-    const tasks = [task("a", "2026-03-09", 3), task("b", "2026-03-12", 2)];
-    // b may start one work day before a finishes.
+    // b starts too early and is pushed out to exactly where the lead allows.
+    const tasks = [task("a", "2026-03-09", 3), task("b", "2026-03-09", 2)];
     const changes = cascade({
       tasks,
       deps: [fs("a", "b", -1)],
       changed: new Map([["a", "2026-03-09"]]),
       calendar: MON_FRI,
     });
-    // a: Mon 9 - Wed 11. FS+1 = Thu 12, lag -1 pulls to Wed 11.
+    // a: Mon 9 - Wed 11. FS+1 = Thu 12, lag -1 gives Wed 11.
     expect(changes.find((c) => c.taskId === "b")?.toStartDate).toBe("2026-03-11");
   });
 
@@ -224,9 +224,10 @@ describe("cascade", () => {
   });
 
   it("still cascades past an undated task once it is given a date", () => {
-    // a → b → c, with b undated. Dating b directly must move c and leave a be.
+    // a → b → c, with b undated. Dating b late enough to overrun c must move
+    // c, and must leave a alone.
     const changes = cascade({
-      tasks: [task("a", "2026-08-10", 1), task("b", null, 2), task("c", "2026-09-01", 1)],
+      tasks: [task("a", "2026-08-10", 1), task("b", null, 2), task("c", "2026-08-12", 1)],
       deps: [fs("a", "b"), fs("b", "c")],
       changed: new Map([["b", "2026-08-17"]]),
       calendar: MON_FRI,
@@ -242,9 +243,9 @@ describe("cascade", () => {
       },
       {
         taskId: "c",
-        fromStartDate: "2026-09-01",
+        fromStartDate: "2026-08-12",
         toStartDate: "2026-08-19",
-        fromEndDate: "2026-09-01",
+        fromEndDate: "2026-08-12",
         toEndDate: "2026-08-19",
         direct: false,
       },
@@ -288,7 +289,8 @@ describe("cascade", () => {
 
 describe("dependency types beyond FS", () => {
   it("SS starts both together, offset by lag", () => {
-    const tasks = [task("a", "2026-03-09", 5), task("b", "2026-03-20", 2)];
+    // b starts before the offset allows, so it is pushed to it.
+    const tasks = [task("a", "2026-03-09", 5), task("b", "2026-03-09", 2)];
     const changes = cascade({
       tasks,
       deps: [{ predecessorId: "a", successorId: "b", depType: "SS", lagDays: 1 }],
@@ -396,7 +398,22 @@ describe("cascade with resized tasks", () => {
     expect(changes.find((c) => c.taskId === "b")?.toStartDate).toBe("2026-03-06");
   });
 
-  it("pulls them back in when it got shorter", () => {
+  it("pushes a successor that the new length would overrun", () => {
+    const changes = cascade({
+      tasks: [task("a", "2026-03-02", 2), task("b", "2026-03-04", 1)],
+      deps: [fs("a", "b")],
+      changed: new Map([["a", "2026-03-02"]]),
+      durations: durations([["a", 4]]),
+      calendar: MON_FRI,
+    });
+    // a now runs Mon 2 - Thu 5, so b cannot stay on Wed 4.
+    expect(changes.find((c) => c.taskId === "b")?.toStartDate).toBe("2026-03-06");
+  });
+
+  it("does NOT pull a successor in when the predecessor got shorter", () => {
+    // Shortening framing does not mean the roofer can come five days early.
+    // Moving a booked crew earlier without being asked is the one direction
+    // this engine must never take on its own.
     const changes = cascade({
       tasks: [task("a", "2026-03-02", 4), task("b", "2026-03-06", 1)],
       deps: [fs("a", "b")],
@@ -404,7 +421,7 @@ describe("cascade with resized tasks", () => {
       durations: durations([["a", 2]]),
       calendar: MON_FRI,
     });
-    expect(changes.find((c) => c.taskId === "b")?.toStartDate).toBe("2026-03-04");
+    expect(changes.find((c) => c.taskId === "b")).toBeUndefined();
   });
 
   it("leaves a task alone when the new duration is the old one", () => {

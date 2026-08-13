@@ -85,9 +85,10 @@ function systemPrompt(ctx: AssistantContext): string {
     `Today is ${ctx.today} in ${ctx.timezone}. Working days (ISO, 1=Mon..7=Sun): ${ctx.workingDays.join(",")}.`,
     "",
     "HOW YOU WORK",
-    "- Most turns are questions. Answer them from the CONTEXT below. Only call propose_changes when the user wants something CHANGED.",
-    "- When they DO want something changed, call propose_changes in the SAME turn. Never ask \"shall I go ahead?\" or \"let me know if you want to proceed\" — the app already shows a diff and asks for confirmation. Asking as well makes him say it twice.",
-    "- Never claim you changed, moved, sent or booked anything. You propose; the user confirms; only then is it real. Say \"that'll move the downspouts\", never \"I've moved the downspouts\".",
+    "- THE ONE RULE: saying you will do something does NOT do it. The ONLY way anything reaches the schedule is calling propose_changes. If your reply describes a change and you did not call the tool, you have told him a lie — he will walk away believing the crew was rebooked and nothing will have happened.",
+    "- So: the moment you decide a change is wanted, call propose_changes IN THE SAME TURN, before or alongside your reply. Never ask \"shall I go ahead?\" — the app already shows a diff and asks. Asking as well makes him say it twice.",
+    "- Most turns are questions, though. Answer those from the CONTEXT below and call nothing.",
+    "- Never use \"I'll\", \"I've\", \"I have\", \"I will\", \"I added\", \"I moved\", \"done\", or \"that's booked\". You propose; he confirms; only then is it real. Say \"that'll add downspouts on Tuesday\" or \"that'd move the downspouts\", never \"I'll add downspouts\".",
     "- Your reply is ONE short line saying what you are proposing. Do not list the knock-on effects and do not name any activity that is not in the CONTEXT below — the app works out what else moves and shows it. Inventing a consequence is worse than saying nothing, because he reads your line and not the diff.",
     "- NEVER describe a change you cannot express with the operations below. If the user asks for something outside them, say plainly that you cannot do it. Reaching for the nearest operation you DO have is the worst option available.",
     "- ADDING IS NOT MOVING. \"Add downspouts Tuesday\", \"put paving in next week\", \"book Whirco Friday\" all CREATE a new activity with add_activity, even when a similarly-named one already exists. Only move an existing one when the user refers to it AND asks for its date to change: \"push the downspouts back\", \"move the final inspection to Friday\".",
@@ -320,5 +321,103 @@ export async function converse(
     turns.push({ role: "assistant", content: reply });
   }
 
+  // ── The backstop ────────────────────────────────────────────────────────────
+  //
+  // A reply that commits to a change, with no proposal behind it, is the single
+  // most damaging thing this can do: he reads "I'll add downspouts for Tuesday",
+  // puts the phone down, and nothing has happened. No error, no diff, and he
+  // finds out when a crew does not turn up.
+  //
+  // The prompt forbids it and the model still does it, so this catches it in
+  // code. One corrective round, then honesty if that fails too.
+  if (!proposed && soundsLikeACommitment(reply)) {
+    const corrected = await retryAsProposal(turns, ctx);
+    if (corrected) return corrected;
+
+    reply =
+      "I can't make that change from here — say it once more and I'll put it " +
+      "up as something you can confirm.";
+    turns.push({ role: "assistant", content: reply });
+  }
+
   return { reply, plan: proposed, turns: turns.slice(-MAX_HISTORY) };
+}
+
+/**
+ * Does this reply promise a change?
+ *
+ * Deliberately blunt. A false positive costs one extra round trip; a false
+ * negative is a subcontractor who was never told. Questions are excluded —
+ * "shall I move it?" is a different failure, and one the prompt handles.
+ */
+export function soundsLikeACommitment(reply: string): boolean {
+  const text = reply.trim();
+  if (text.endsWith("?")) return false;
+
+  return [
+    /\bI['’]?(ll|ve)\b/i,
+    /\bI (will|have|am going to|did)\b/i,
+    /\bI['’]?m (adding|moving|pushing|setting|booking|changing|removing)\b/i,
+    /\b(added|moved|pushed|booked|scheduled|rescheduled|updated|removed|deleted)\s+(it|that|the)\b/i,
+    /\b(done|all set|that's booked|consider it done)\b/i,
+  ].some((pattern) => pattern.test(text));
+}
+
+/**
+ * Ask once more, having pointed out the contradiction.
+ *
+ * Fed back as a user turn rather than a system one so it sits in the same
+ * conversation the model just produced — it reads as being corrected mid-thought,
+ * which lands better than a fresh instruction bolted to the front.
+ */
+async function retryAsProposal(
+  turns: Turn[],
+  ctx: AssistantContext,
+): Promise<AgentResult | null> {
+  const nudge: Turn = {
+    role: "user",
+    content:
+      "You described a change but did not call propose_changes, so nothing " +
+      "would happen. Call propose_changes now with exactly what you described. " +
+      "Reply with one short line, and do not say \"I'll\" or \"I've\".",
+  };
+
+  let message: ChoiceMessage;
+  try {
+    message = await complete([
+      { role: "system", content: systemPrompt(ctx) },
+      ...toApiMessages([...turns, nudge]),
+    ]);
+  } catch {
+    // The backstop must never turn a harmless non-answer into an error.
+    return null;
+  }
+
+  const call = message.tool_calls?.find((c) => c.function.name === "propose_changes");
+  if (!call) return null;
+
+  let args: Record<string, unknown>;
+  try {
+    args = JSON.parse(call.function.arguments || "{}") as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+
+  const parsed = planSchema.safeParse({
+    summary: args.summary,
+    reason: args.reason ?? null,
+    operations: args.operations ?? [],
+    notes: args.notes ?? null,
+    clarification: args.clarification ?? null,
+    confidence: args.confidence === "low" ? "low" : "high",
+  });
+  if (!parsed.success || parsed.data.operations.length === 0) return null;
+
+  const reply = (message.content ?? "").trim() || "That's what that would change.";
+  const spoken: Turn = { role: "assistant", content: reply };
+  return {
+    reply,
+    plan: parsed.data,
+    turns: [...turns, spoken].slice(-MAX_HISTORY),
+  };
 }

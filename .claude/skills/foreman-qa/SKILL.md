@@ -81,8 +81,11 @@ shapes, not a synthetic toy.
 
 **Needs a model:** whether it picks `add_activity` over `move_activity`, whether
 it captures a reason, whether it proposes instead of asking permission. Only a
-person running the app catches these. Produce a precise, checkable script — the
-exact words to say and the exact expected outcome — rather than running it.
+person running the app catches these.
+
+Those cases are written out in **`tests/manual-cases.md`** — exact words, the
+state to run them against, and what must and must not happen. Work from that
+file rather than improvising, and add to it when a new failure is found.
 
 ### Writing a behavioural case
 

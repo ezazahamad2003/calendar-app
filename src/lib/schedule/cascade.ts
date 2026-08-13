@@ -168,8 +168,23 @@ export function cascade(input: CascadeInput): TaskChange[] {
         }
       }
 
-      // No constraint and no direct move → leave it where it is.
-      if (earliest) resolved = earliest;
+      // A dependency is a **"no earlier than"** constraint, not a magnet.
+      //
+      // It pushes a successor out of the way when its predecessor would
+      // overrun it, and otherwise leaves it alone. Snapping every task tight
+      // against its constraint instead looks identical on a freshly imported
+      // schedule and is badly wrong the moment anyone adjusts one by hand: the
+      // consultant's inspection is moved a day for rain, then some unrelated
+      // activity is added, the cascade runs, and the inspection is silently
+      // pulled back to where the arithmetic says it "should" be. The change he
+      // made on site is gone and nothing in the diff explains why.
+      //
+      // Pushing still works exactly as before — a slip propagates down the
+      // whole chain, because every link below it is genuinely violated. What
+      // stops is the pulling.
+      if (earliest && (!resolved || earliest.getTime() > resolved.getTime())) {
+        resolved = earliest;
+      }
     }
 
     if (!resolved) continue;

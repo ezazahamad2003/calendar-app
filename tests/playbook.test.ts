@@ -208,3 +208,57 @@ describe("resizing", () => {
     ).toBe("2026-08-21");
   });
 });
+
+describe("a hand-made adjustment survives later edits", () => {
+  // Found by running case B1 from tests/manual-cases.md against the real
+  // chart: adding an unrelated activity silently pulled The Fire Consultant
+  // inspection a day earlier, undoing a date that had been set deliberately
+  // for rain. A dependency is a "no earlier than" constraint; it must push a
+  // successor out of the way and never drag it back in.
+  it("does not pull a task back to its constraint when something unrelated changes", () => {
+    const d = doc();
+
+    // Give the consultant's inspection a day of slack, as a person would.
+    const nudged = applyOperations(d, [
+      { type: "push_activity", taskId: ID.consultant, byDays: 1 },
+    ]);
+    const parked = nudged.doc.tasks.find((t) => t.id === ID.consultant)?.startDate;
+    expect(parked).toBe("2026-08-24"); // Fri 21 → Mon 24, over the weekend
+
+    // Now add something with no relationship to it at all.
+    const after = applyOperations(nudged.doc, [
+      {
+        type: "add_activity",
+        name: "Install Downspouts",
+        team: "Solano Seamless",
+        startDate: "2026-08-18",
+        durationDays: 1,
+        status: "confirmed",
+        after: [],
+      },
+    ]);
+
+    expect(after.doc.tasks.find((t) => t.id === ID.consultant)?.startDate).toBe(parked);
+    expect(after.moves.map((m) => m.taskId)).not.toContain(ID.consultant);
+  });
+
+  it("still pushes that task when its predecessor genuinely overruns it", () => {
+    const d = doc();
+    const nudged = applyOperations(d, [
+      { type: "push_activity", taskId: ID.consultant, byDays: 1 },
+    ]);
+
+    // Push the pump test hard enough to overrun the slack just created.
+    const after = applyOperations(nudged.doc, [
+      { type: "push_activity", taskId: ID.pumpTest, byDays: 5 },
+    ]);
+
+    // Pump test Wed 19 + 5 work days = Wed 26, finishing the same day. FS + 1
+    // work day = Thu 27, plus the link's own 1-day lag = Fri 28 — past the
+    // Monday the inspection had been parked on, so it gives way.
+    const moved = after.moves.find((m) => m.taskId === ID.consultant);
+    expect(moved).toBeDefined();
+    expect(moved?.direct).toBe(false);
+    expect(moved?.toStartDate).toBe("2026-08-28");
+  });
+});
