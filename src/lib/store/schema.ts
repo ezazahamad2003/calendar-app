@@ -115,6 +115,24 @@ export const scheduleDocSchema = z.object({
   contacts: z.array(contactSchema),
   changeLog: z.array(changeEntrySchema),
   share: z.object({ token: z.string().min(1), enabled: z.boolean() }),
+  /**
+   * Absent in documents written before mail connections existed, so this
+   * defaults rather than failing. A stored schedule must never become
+   * unreadable because the app gained a feature.
+   */
+  connection: z
+    .object({
+      provider: z.enum(["microsoft", "google"]),
+      email: z.string().nullable(),
+      providerUserId: z.string().nullable(),
+      refreshTokenEncrypted: z.string().min(1),
+      scopes: z.array(z.string()),
+      status: z.enum(["active", "needs_reauth"]),
+      connectedAt: z.string(),
+      lastRefreshedAt: z.string().nullable(),
+    })
+    .nullish()
+    .transform((v) => v ?? null),
 });
 
 /**

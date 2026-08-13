@@ -93,5 +93,7 @@ export function seedDoc(now: Date = new Date()): ScheduleDoc {
     // 24 bytes of base64url. Long enough that the read-only link cannot be
     // guessed or walked, short enough to survive being texted to a foreman.
     share: { token: randomBytes(18).toString("base64url"), enabled: true },
+    // Connected on the Connections page, not seeded.
+    connection: null,
   };
 }

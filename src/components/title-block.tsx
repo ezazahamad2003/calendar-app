@@ -12,7 +12,7 @@ export function TitleBlock({
   readOnly = false,
 }: {
   project: ProjectMeta;
-  current: "chart" | "crew" | "history" | "share";
+  current: "chart" | "crew" | "history" | "connections" | "share";
   readOnly?: boolean;
 }) {
   return (
@@ -44,6 +44,13 @@ export function TitleBlock({
             aria-current={current === "history" ? "page" : undefined}
           >
             History
+          </Link>
+          <Link
+            className="tab"
+            href="/connections"
+            aria-current={current === "connections" ? "page" : undefined}
+          >
+            Mail
           </Link>
         </nav>
       )}

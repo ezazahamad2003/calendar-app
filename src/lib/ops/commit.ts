@@ -146,7 +146,7 @@ export async function commitPlan(input: CommitInput): Promise<CommitResult> {
 
   // ── 2. Send ─────────────────────────────────────────────────────────────────
 
-  const post = mailer();
+  const post = await mailer();
   const queued = (change as ChangeEntry).notifications.filter((n) => n.status === "queued");
   const outcomes = new Map<string, { status: Notification["status"]; error: string | null }>();
 

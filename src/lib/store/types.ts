@@ -137,6 +137,34 @@ export type ProjectMeta = {
   timezone: string;
 };
 
+/** The mailbox the schedule sends from. */
+export type MailProvider = "microsoft" | "google";
+
+/**
+ * A connected Google or Outlook account.
+ *
+ * One, not many: there is one contractor and one mailbox, so the "which
+ * account does this send from?" question has no way to become ambiguous.
+ * Connecting a second replaces the first.
+ *
+ * `refreshTokenEncrypted` is AES-256-GCM under `TOKEN_ENCRYPTION_KEY` and is
+ * encrypted before it is ever written. It is the one genuinely dangerous value
+ * in this document — it grants send-as on a real mailbox — which is why it is
+ * never returned to the browser and never logged.
+ */
+export type MailConnection = {
+  provider: MailProvider;
+  /** Which address the crew will see mail come from. */
+  email: string | null;
+  providerUserId: string | null;
+  refreshTokenEncrypted: string;
+  scopes: string[];
+  /** `needs_reauth` after a refresh fails — the UI shows a reconnect banner. */
+  status: "active" | "needs_reauth";
+  connectedAt: string;
+  lastRefreshedAt: string | null;
+};
+
 export type ScheduleDoc = {
   /**
    * Bumped on every write. A writer that read version N refuses to store N+1
@@ -155,4 +183,6 @@ export type ScheduleDoc = {
   changeLog: ChangeEntry[];
   /** The read-only link handed to the crew. */
   share: { token: string; enabled: boolean };
+  /** The mailbox notifications send from. Null until someone connects one. */
+  connection: MailConnection | null;
 };

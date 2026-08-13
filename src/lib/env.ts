@@ -28,6 +28,15 @@ const optionalString = () =>
     z.string().trim().min(1).optional(),
   );
 
+/** Bytes a base64 string decodes to, or null if it is not base64 at all. */
+function decodedByteLength(base64: string): number | null {
+  try {
+    return Buffer.from(base64, "base64").length;
+  } catch {
+    return null;
+  }
+}
+
 const serverSchema = z
   .object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -50,10 +59,51 @@ const serverSchema = z
     OPENAI_STT_MODEL: z.string().trim().min(1).default("whisper-1"),
     OPENAI_PLANNER_MODEL: z.string().trim().min(1).default("gpt-4o"),
 
-    // ── Email ─────────────────────────────────────────────────────────────────
-    // Unset means the console driver: notifications are composed, recorded and
-    // shown in the app, but nothing leaves the building. That is the right
-    // default for a schedule full of real subcontractors.
+    // ── Mail: the connected mailbox ───────────────────────────────────────────
+    //
+    // The preferred way to send: the contractor's own Gmail or Outlook,
+    // connected once on /connections. Mail arrives from the address his subs
+    // recognise and their replies reach him.
+    //
+    // Each provider is optional and validated only if present, so connecting
+    // just one of the two is normal and the other simply never appears as an
+    // option.
+
+    /** Encrypts refresh tokens at rest. `openssl rand -base64 32`. */
+    TOKEN_ENCRYPTION_KEY: optionalString().refine(
+      (v) => v === undefined || decodedByteLength(v) === 32,
+      "TOKEN_ENCRYPTION_KEY must be 32 bytes, base64-encoded (openssl rand -base64 32)",
+    ),
+
+    MS_CLIENT_ID: optionalString(),
+    MS_CLIENT_SECRET: optionalString(),
+    /** `common` lets any Microsoft account connect; a tenant id restricts it. */
+    MS_TENANT_ID: z.string().trim().min(1).default("common"),
+    MS_REDIRECT_URI: optionalString().pipe(z.url().optional()),
+    // Mail.Send is the whole ask now the calendar is gone. User.Read is only
+    // so the app can show which address it will send from.
+    MS_SCOPES: z
+      .string()
+      .trim()
+      .min(1)
+      .default("offline_access User.Read Mail.Send"),
+
+    GOOGLE_CLIENT_ID: optionalString(),
+    GOOGLE_CLIENT_SECRET: optionalString(),
+    GOOGLE_REDIRECT_URI: optionalString().pipe(z.url().optional()),
+    // `gmail.send` is send-only and deliberately not `gmail.readonly`, which is
+    // a restricted scope and drags in Google's security assessment.
+    GOOGLE_SCOPES: z
+      .string()
+      .trim()
+      .min(1)
+      .default("openid email https://www.googleapis.com/auth/gmail.send"),
+
+    // ── Mail: the fallback ────────────────────────────────────────────────────
+    // Used only when no mailbox is connected. Unset means the console driver:
+    // notifications are composed, recorded and shown in the app, but nothing
+    // leaves the building. That is the right default for a schedule full of
+    // real subcontractors.
     RESEND_API_KEY: optionalString(),
     /** Must be on a domain verified with Resend, or every send bounces. */
     MAIL_FROM: optionalString(),
