@@ -34,6 +34,34 @@ export interface StoreDriver {
 const DOC_KEY = "schedule.json";
 
 /**
+ * Find the Blob read-write token, whatever Vercel decided to call it.
+ *
+ * The classic name is `BLOB_READ_WRITE_TOKEN`, injected when a store is
+ * connected through the project's old direct "Connect" button. Connecting
+ * through the newer unified **Connect Database** flow — the one the Storage
+ * tab defaults to now — can prefix it instead, e.g. `MYSTORE_BLOB_READ_WRITE_TOKEN`,
+ * specifically to avoid colliding with a second store's token
+ * (`vercel integration resource connect --prefix`, documented under the CLI
+ * integration reference). A deployment can therefore have a working, connected
+ * Blob store and still have no variable named exactly `BLOB_READ_WRITE_TOKEN` —
+ * which looks identical to not being connected at all, and is why this exists
+ * rather than a single `process.env.BLOB_READ_WRITE_TOKEN` read.
+ *
+ * Falls back to scanning for anything ending `_BLOB_READ_WRITE_TOKEN`. One
+ * store means one match in practice; if a second store is ever connected, name
+ * the classic variable explicitly rather than leave this to guess between two.
+ */
+export function resolveBlobToken(): string | undefined {
+  const exact = process.env.BLOB_READ_WRITE_TOKEN?.trim();
+  if (exact) return exact;
+
+  const prefixed = Object.entries(process.env).find(
+    ([key, value]) => key.endsWith("_BLOB_READ_WRITE_TOKEN") && value?.trim(),
+  );
+  return prefixed?.[1]?.trim();
+}
+
+/**
  * The store must be created **Private** in the Vercel dashboard, and this must
  * agree with it.
  *
@@ -141,7 +169,7 @@ let cached: StoreDriver | null = null;
 export function storeDriver(): StoreDriver {
   if (cached) return cached;
 
-  const token = process.env.BLOB_READ_WRITE_TOKEN?.trim();
+  const token = resolveBlobToken();
   if (token) {
     cached = new BlobDriver(token);
     return cached;
@@ -149,9 +177,11 @@ export function storeDriver(): StoreDriver {
 
   if (process.env.VERCEL === "1" && process.env.NODE_ENV === "production") {
     throw new Error(
-      "BLOB_READ_WRITE_TOKEN is not set. On Vercel the filesystem is discarded " +
+      "No Blob read-write token was found (checked BLOB_READ_WRITE_TOKEN and " +
+        "any *_BLOB_READ_WRITE_TOKEN). On Vercel the filesystem is discarded " +
         "between requests, so the schedule would be lost. Create a Blob store in " +
-        "the Vercel dashboard (Storage → Create → Blob) and redeploy.",
+        "the Vercel dashboard (Storage → Create → Blob) and connect it to this " +
+        "project, then redeploy.",
     );
   }
 

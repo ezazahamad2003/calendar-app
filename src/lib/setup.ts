@@ -1,5 +1,7 @@
 import "server-only";
 
+import { resolveBlobToken } from "@/lib/store/driver";
+
 /**
  * Things a deployment needs before it can do anything, reported rather than
  * thrown.
@@ -23,8 +25,13 @@ export function setupProblems(): SetupProblem[] {
   // Blob is the only durable store on Vercel. Without it the app appears to
   // work and then silently forgets every change when the function instance is
   // recycled, which is far worse than refusing to start.
+  //
+  // `resolveBlobToken()`, not a direct read of `BLOB_READ_WRITE_TOKEN` — the
+  // newer "Connect Database" flow in the Storage tab can inject the token
+  // under a prefixed name instead (`MYSTORE_BLOB_READ_WRITE_TOKEN`), and a
+  // store connected that way must not show as "not connected" here.
   const onVercel = process.env.VERCEL === "1";
-  if (onVercel && !process.env.BLOB_READ_WRITE_TOKEN?.trim()) {
+  if (onVercel && !resolveBlobToken()) {
     problems.push({
       title: "Connect a Blob store",
       message:

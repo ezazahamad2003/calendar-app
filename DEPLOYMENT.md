@@ -6,8 +6,17 @@ mail sends through the contractor's own Gmail or Outlook.
 
 ## 1. Create a Blob store
 
-**Storage → Create → Blob**, connect it to the project. Vercel injects
-`BLOB_READ_WRITE_TOKEN` for you.
+**Storage → Create → Blob**, connect it to the project. Vercel injects a
+read-write token for you.
+
+**Use the classic "Connect to Project" button, not "Connect Database".** Both
+appear on the Storage tab now. Connect Database is Vercel's newer unified flow
+and can inject the token under a *prefixed* name to avoid colliding with a
+second store — `MYSTORE_BLOB_READ_WRITE_TOKEN` instead of
+`BLOB_READ_WRITE_TOKEN` — which is invisible in the UI and looks identical to
+the store not being connected at all. The app's `resolveBlobToken()` finds a
+prefixed name too, so either button works; the classic one just avoids the
+confusion of a store that is clearly connected and still shows "Almost there".
 
 In the create dialog:
 
