@@ -8,9 +8,23 @@ provision, no OAuth app to register, and no passcode to choose.
 **Storage → Create → Blob**, connect it to the project. Vercel injects
 `BLOB_READ_WRITE_TOKEN` for you.
 
+In the create dialog:
+
+| Field | Value |
+|---|---|
+| Store Name | Anything — `foreman-schedule` |
+| Region | `iad1`, matching where the functions deploy |
+| Access | **Private** |
+
+**Private matters.** The document carries every subcontractor's email address,
+and a public blob is readable by anyone who ever sees its URL. Nothing needs
+that — the app is the only reader and it reads server-side with the token.
+`BLOB_ACCESS` in `src/lib/store/driver.ts` is set to `private` to match; a
+public store makes the reads fail, so change one or the other.
+
 This is not optional in production. A serverless function's filesystem is
 discarded between invocations, so without it every change is silently lost —
-the app refuses to start rather than let that happen quietly.
+the app shows a setup screen rather than let that happen quietly.
 
 ## 2. Set the environment variables
 
